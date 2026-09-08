@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Paris Immo">
 <meta name="theme-color" content="#1a1a1a">
 <title>Paris Immo · Alertes</title>
 <link rel="manifest" href="./manifest.webmanifest">
@@ -439,6 +440,45 @@
     background: var(--ink);
     color: white;
   }
+  .btn-del {
+    background: var(--surface2);
+    color: var(--ink3);
+    font-size: 14px;
+  }
+  .btn-del:active { background: rgba(192,57,43,0.15); color: var(--red); }
+
+  /* ANNONCES ÉCARTÉES */
+  .card.ecartee .card-photo img { filter: grayscale(0.7); opacity: 0.85; }
+  .ecartee-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 16px; background: rgba(192,57,43,0.08); color: var(--red);
+    font-size: 12px; font-weight: 500; border-bottom: 1px solid var(--border);
+  }
+  .ecartee-banner .restore {
+    padding: 5px 11px; border-radius: 999px; border: 1.5px solid var(--red); background: white;
+    color: var(--red); font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  }
+  .ecartee-banner .restore:active { opacity: 0.7; }
+  .section-note { font-size: 12px; color: var(--ink3); line-height: 1.5; margin: -8px 0 14px; }
+  .cfg-input {
+    flex: 1; min-width: 0; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px;
+    font-family: 'DM Sans', sans-serif; color: var(--ink); background: var(--bg);
+  }
+  .cfg-btn {
+    padding: 10px 14px; background: var(--ink); color: white; border: none; border-radius: 10px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer;
+  }
+  .cfg-status { font-size: 12px; color: var(--ink2); line-height: 1.5; margin-top: 8px; }
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: 96px; max-width: 398px; margin: 0 auto; z-index: 998;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: #1a1a1a; color: white; border-radius: 14px; padding: 12px 16px; font-size: 13px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3); animation: fadeIn 0.2s ease;
+  }
+  .toast button {
+    background: none; border: none; color: var(--accent); font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 0 4px 8px; white-space: nowrap;
+  }
 
   .card-metro {
     padding: 4px 16px 10px;
@@ -831,6 +871,7 @@
 <div class="tabs">
   <div class="tab active" onclick="switchTab('annonces', this)">Annonces</div>
   <div class="tab" onclick="switchTab('favoris', this)">Favoris</div>
+  <div class="tab" onclick="switchTab('ecartees', this)">Écartées</div>
   <div class="tab" onclick="switchTab('criteres', this)">Critères</div>
   <div class="tab" onclick="switchTab('config', this)">Config</div>
 </div>
@@ -867,6 +908,22 @@
       <div class="empty-icon">🏠</div>
       <div class="empty-title">Aucun favori</div>
       <div class="empty-sub">Appuyez sur ♡ sur une annonce<br>pour la sauvegarder ici</div>
+    </div>
+  </div>
+</div>
+
+<!-- ÉCARTÉES -->
+<div id="tab-ecartees" class="section">
+  <div class="section-header">
+    <div class="section-title">Annonces écartées</div>
+    <span class="badge" id="ecartees-badge">0</span>
+  </div>
+  <div class="section-note">Conservées ici <span id="ecartees-retention">7</span> jours, puis supprimées définitivement. Le job ne les reproposera jamais, même republiées sur un autre site.</div>
+  <div id="ecartees-container">
+    <div class="empty">
+      <div class="empty-icon">🗑️</div>
+      <div class="empty-title">Rien d'écarté</div>
+      <div class="empty-sub">Appuyez sur 🗑 sur une annonce<br>pour la retirer du fil</div>
     </div>
   </div>
 </div>
@@ -1010,19 +1067,38 @@
         <div class="step-title">Autre classeur ?</div>
         <div class="step-desc">Laisse vide pour utiliser le Sheet par défaut, ou colle l'ID d'un autre classeur.</div>
         <div style="margin-top:10px;display:flex;gap:8px">
-          <input id="sheet-id-input" type="text" placeholder="ID du Google Sheet (optionnel)" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--bg)">
-          <button onclick="saveSheetId()" style="padding:10px 14px;background:var(--ink);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">OK</button>
+          <input id="sheet-id-input" type="text" placeholder="ID du Google Sheet (optionnel)" class="cfg-input">
+          <button onclick="saveSheetId()" class="cfg-btn">OK</button>
         </div>
       </div>
     </div>
   </div>
 
+  <div class="criteria-card">
+    <div class="criteria-title">🗑️ Annonces écartées</div>
+    <div style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:10px">
+      « Supprimer » est partagé entre les téléphones et vu par le job grâce à un petit script Google attaché au Sheet
+      (onglet « Écartées », voir <code>gas/ecartees.gs</code>). Colle ici l'URL de déploiement (…/exec) et la clé choisie dans le script.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <input id="script-url-input" type="url" placeholder="URL du script (https://script.google.com/macros/s/…/exec)" class="cfg-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div style="display:flex;gap:8px">
+        <input id="script-key-input" type="password" placeholder="Clé (facultative)" class="cfg-input" autocomplete="off">
+        <button onclick="saveScriptConfig()" class="cfg-btn">OK</button>
+      </div>
+    </div>
+    <div class="cfg-status" id="script-status">Script non configuré — les suppressions restent sur ce téléphone.</div>
+  </div>
+
   <div class="criteria-card" style="margin-bottom:40px">
     <div class="criteria-title">📥 Installer comme app</div>
     <div style="font-size:13px;color:var(--ink2);line-height:1.6">
-      <strong>iPhone :</strong> Safari → Partager → "Sur l'écran d'accueil"<br><br>
-      <strong>Android :</strong> Chrome → ⋮ → "Ajouter à l'écran d'accueil"<br><br>
-      L'app se lancera comme une vraie application, sans barre de navigation.
+      <strong>iPhone (iOS 16.4 ou plus) :</strong> ouvre ce lien dans <strong>Safari</strong> → bouton Partager <span style="font-size:15px">⎋</span> → « Sur l'écran d'accueil ».
+      Ensuite, lance l'app <em>depuis l'écran d'accueil</em> (pas depuis Safari) → Config → « Activer les notifications » :
+      sur iPhone, les notifications ne fonctionnent que dans l'app installée.<br><br>
+      <strong>Android :</strong> Chrome → ⋮ → « Ajouter à l'écran d'accueil » (ou « Installer l'application »).<br><br>
+      L'app se lance comme une vraie application, sans barre de navigation. Chaque téléphone a son propre token : envoie-le
+      à la personne qui gère le job pour l'ajouter à <code>FCM_TOKENS</code>.
     </div>
   </div>
 </div>
@@ -1036,6 +1112,10 @@
   <div class="nav-item" onclick="switchSection('favoris', this)">
     <div class="nav-icon">♡</div>
     <div class="nav-lbl">Favoris</div>
+  </div>
+  <div class="nav-item" onclick="switchSection('ecartees', this)">
+    <div class="nav-icon">🗑️</div>
+    <div class="nav-lbl">Écartées</div>
   </div>
   <div class="nav-item" onclick="switchSection('criteres', this)">
     <div class="nav-icon">🎯</div>
@@ -1054,6 +1134,11 @@
 // (« Tous les utilisateurs disposant du lien : Lecteur ») pour que l'app puisse le lire.
 const DEFAULT_SHEET_ID = '1gQuCClnnOJ1b1t_VwtgiQ2qchCq-QALxrmtsX5PI6Ts';
 const SHEET_TAB = 'Annonces';
+const ECARTEES_TAB = 'Écartées';            // rempli par gas/ecartees.gs, purgé par le job après ECARTEES_JOURS
+const ECARTEES_JOURS = 7;
+// URL de déploiement du script Apps Script (…/exec). Laisser vide et la saisir dans Config,
+// ou la renseigner ici pour qu'elle soit prête sur tous les téléphones (la clé reste à saisir).
+const DEFAULT_SCRIPT_URL = '';
 const REFRESH_EVERY_MS = 5 * 60 * 1000;     // rafraîchissement auto quand l'app est ouverte
 const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;  // « nouveau » = détecté depuis moins de 24 h
 
@@ -1085,8 +1170,16 @@ let activeFilter = 'all';
 let toggleState = JSON.parse(localStorage.getItem('immo-sources') || '{}');
 let lastSync = null;
 let fcmToken = localStorage.getItem('fcm-token') || '';
+let ECARTEES = new Map();  // logement → { date, purgee } d'après l'onglet Écartées du Sheet
+// Demandes pas encore confirmées par le script (hors-ligne, script absent…) : logement → { action, date, ids, titre }
+let pendingEcarts = JSON.parse(localStorage.getItem('immo-ecartees-pending') || '{}');
 
 function getSheetId() { return localStorage.getItem('sheet-id') || DEFAULT_SHEET_ID; }
+function getScriptUrl() { return localStorage.getItem('script-url') || DEFAULT_SCRIPT_URL; }
+function getScriptKey() { return localStorage.getItem('script-key') || ''; }
+
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
 
 // ─── DONNÉES : GOOGLE SHEET ─────────────────────────────────────────────────
 
@@ -1103,8 +1196,8 @@ function parseGvizDate(v) {
   return isNaN(d) ? null : d;
 }
 
-async function fetchSheetRows(sheetId) {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_TAB)}&headers=1&_=${Date.now()}`;
+async function fetchSheetRows(sheetId, tab = SHEET_TAB) {
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tab)}&headers=1&_=${Date.now()}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const text = await res.text();
@@ -1170,6 +1263,7 @@ function grouper(listings) {
   for (const [cle, membres] of groupes) {
     membres.sort((a, b) => (a.detected?.getTime() || 0) - (b.detected?.getTime() || 0));
     const principal = membres.find(m => m.id === cle) || membres[0];
+    principal.logementId = cle;  // clé du groupe = colonne Logement du Sheet (ou l'ID quand seule)
     principal.autres = membres.filter(m => m !== principal).map(m => ({
       id: m.id, source: m.source, sourceName: m.sourceName, url: m.url, price: m.price, detected: m.detected,
     }));
@@ -1180,6 +1274,25 @@ function grouper(listings) {
   return out;
 }
 
+// Onglet « Écartées » (une ligne par annonce du logement écarté) → Map logement → { date, purgee }
+function rowsToEcartees(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const id = String(row.id || '').trim();
+    if (!id) continue;
+    const logement = String(row.logement || '').trim() || id;
+    const date = parseGvizDate(row.dateecartee);
+    const purgee = !!String(row.purgeele || '').trim();
+    const prev = map.get(logement);
+    if (!prev || (date && (!prev.date || date < prev.date))) map.set(logement, { logement, date, purgee: prev ? (prev.purgee || purgee) : purgee });
+    else if (purgee) prev.purgee = true;
+    if (logement !== id && !map.has(id)) map.set(id, map.get(logement));
+  }
+  return map;
+}
+
+function nbLogementsEcartes() { return [...ECARTEES.entries()].filter(([k, v]) => (v.logement || k) === k).length; }
+
 function loadCache() {
   try {
     const cached = JSON.parse(localStorage.getItem('immo-cache') || 'null');
@@ -1188,23 +1301,41 @@ function loadCache() {
       RAW_LISTINGS.forEach(l => { l.isNew = l.detected ? (Date.now() - l.detected.getTime()) < NEW_WINDOW_MS : false; });
       LISTINGS = grouper(RAW_LISTINGS);
       lastSync = cached.lastSync ? new Date(cached.lastSync) : null;
+      ECARTEES = new Map((cached.ecartees || []).map(([k, v]) => [k, { logement: v.logement || k, date: v.date ? new Date(v.date) : null, purgee: !!v.purgee }]));
     }
   } catch (e) { /* cache illisible → on repart de zéro */ }
 }
 
 function saveCache() {
-  try { localStorage.setItem('immo-cache', JSON.stringify({ listings: RAW_LISTINGS.map(({ autres, prixMin, ...l }) => l), lastSync })); } catch (e) { /* quota */ }
+  try {
+    localStorage.setItem('immo-cache', JSON.stringify({
+      listings: RAW_LISTINGS.map(({ autres, prixMin, logementId, ...l }) => l), lastSync, ecartees: [...ECARTEES.entries()],
+    }));
+  } catch (e) { /* quota */ }
 }
 
 async function refreshListings({ manual = false } = {}) {
   const btn = document.getElementById('refresh-btn');
   if (manual && btn) { btn.innerHTML = '<span class="spinning">↻</span> Actualisation…'; btn.disabled = true; }
   try {
-    const rows = await fetchSheetRows(getSheetId());
+    await flushPendingEcarts();
+    const [rows, rowsEcartees] = await Promise.all([
+      fetchSheetRows(getSheetId()),
+      // L'onglet n'existe qu'après le premier « Supprimer » : son absence n'est pas une erreur
+      fetchSheetRows(getSheetId(), ECARTEES_TAB).catch(e => { console.warn('Onglet Écartées illisible :', e.message); return null; }),
+    ]);
     const listings = rows.map(rowToListing).filter(Boolean);
     listings.sort((a, b) => (b.detected?.getTime() || 0) - (a.detected?.getTime() || 0));
     RAW_LISTINGS = listings;
     LISTINGS = grouper(listings);
+    if (rowsEcartees) {
+      ECARTEES = rowsToEcartees(rowsEcartees);
+      // Le Sheet confirme ce qu'on avait en attente → plus rien à renvoyer
+      for (const [logement, p] of Object.entries(pendingEcarts)) {
+        if ((p.action === 'ecarter' && ECARTEES.has(logement)) || (p.action === 'restaurer' && !ECARTEES.has(logement))) delete pendingEcarts[logement];
+      }
+      savePending();
+    }
     lastSync = new Date();
     saveCache();
     renderAll();
@@ -1243,11 +1374,18 @@ function formatDate(d) {
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-function createCard(listing) {
+function createCard(listing, { ecartee = false } = {}) {
   const isFav = favorites.includes(listing.id);
   const style = sourceStyle(listing.source);
+  const logement = listing.logementId || listing.id;
+  const info = ecartee ? ecartInfo(logement) : null;
   return `
-    <div class="card" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}">
+    <div class="card ${ecartee ? 'ecartee' : ''}" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}" data-logement="${esc(logement)}">
+      ${ecartee ? `
+      <div class="ecartee-banner">
+        <span>🗑 Écartée ${esc(info.quand)} · ${esc(info.restant)}</span>
+        <button class="restore" onclick="restaurer('${esc(logement)}')">↩ Restaurer</button>
+      </div>` : ''}
       <div class="card-photo">
         ${listing.photo
           ? `<img src="${esc(listing.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=\'photo-placeholder\'>🏠</div>'">`
@@ -1287,7 +1425,8 @@ function createCard(listing) {
       <div class="card-footer">
         <span class="card-date">${esc(formatDate(listing.detected))}</span>
         <div class="card-actions">
-          <button class="btn-icon btn-fav ${isFav ? 'active' : ''}" onclick="toggleFav('${esc(listing.id)}', this)">${isFav ? '♥' : '♡'}</button>
+          ${ecartee ? '' : `<button class="btn-icon btn-fav ${isFav ? 'active' : ''}" onclick="toggleFav('${esc(listing.id)}', this)">${isFav ? '♥' : '♡'}</button>
+          <button class="btn-icon btn-del" title="Écarter cette annonce" onclick="ecarter('${esc(logement)}')">🗑</button>`}
           <button class="btn-icon btn-open" onclick="window.open('${esc(listing.url)}','_blank')">↗</button>
         </div>
       </div>
@@ -1296,8 +1435,116 @@ function createCard(listing) {
 
 function sourcesDe(l) { return [l.source].concat((l.autres || []).map(a => a.source)); }
 
+// ─── ANNONCES ÉCARTÉES ────────────────────────────────────────────────────────
+//
+// État effectif = onglet « Écartées » du Sheet ⊕ demandes locales pas encore confirmées
+// (pendingEcarts). Le job purge les lignes du Sheet après ECARTEES_JOURS : l'annonce disparaît
+// alors d'elle-même de l'app, mais reste bloquée côté job.
+
+function savePending() { localStorage.setItem('immo-ecartees-pending', JSON.stringify(pendingEcarts)); }
+
+function ecartInfo(logement) {
+  const p = pendingEcarts[logement];
+  if (p && p.action === 'restaurer') return null;
+  const e = p && p.action === 'ecarter' ? { date: new Date(p.date), purgee: false, locale: true } : ECARTEES.get(logement);
+  if (!e) return null;
+  const ms = e.date ? Date.now() - e.date.getTime() : 0;
+  const jours = Math.floor(ms / 86400000);
+  const restants = Math.max(ECARTEES_JOURS - jours, 0);
+  return {
+    date: e.date, purgee: e.purgee, locale: !!e.locale,
+    quand: jours <= 0 ? "aujourd'hui" : jours === 1 ? 'hier' : `il y a ${jours} j`,
+    restant: e.purgee ? 'supprimée du Sheet' : restants === 0 ? 'suppression imminente' : `supprimée dans ${restants} j`,
+  };
+}
+
+function isEcartee(l) {
+  const logement = l.logementId || l.id;
+  if (ecartInfo(logement)) return true;
+  // Un des membres du groupe est visé (écartement fait depuis un autre regroupement)
+  return [l.id].concat((l.autres || []).map(a => a.id)).some(id => id !== logement && ecartInfo(id));
+}
+
 function visibleListings() {
-  return LISTINGS.filter(l => sourcesDe(l).some(src => toggleState[src] !== false));
+  return LISTINGS.filter(l => !isEcartee(l) && sourcesDe(l).some(src => toggleState[src] !== false));
+}
+
+function ecarteesListings() {
+  return LISTINGS.filter(isEcartee).sort((a, b) => {
+    const da = ecartInfo(a.logementId || a.id)?.date?.getTime() || 0, db = ecartInfo(b.logementId || b.id)?.date?.getTime() || 0;
+    return db - da;
+  });
+}
+
+async function envoyerAuScript(payload) {
+  const url = getScriptUrl();
+  if (!url) throw new Error('script non configuré');
+  // Corps en text/plain : requête « simple », pas de préflight CORS (Apps Script ne le gère pas)
+  const res = await fetch(url, { method: 'POST', body: JSON.stringify({ cle: getScriptKey(), appareil: navigator.platform, ...payload }) });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch (e) { throw new Error('réponse inattendue du script (URL /exec ? accès « Tout le monde » ?)'); }
+  if (!json.ok) { const err = new Error(json.erreur || 'refusé par le script'); err.definitif = true; throw err; }
+  return json;
+}
+
+// Renvoie les demandes restées en attente (hors-ligne, script configuré après coup…)
+async function flushPendingEcarts() {
+  if (!getScriptUrl()) return;
+  for (const logement of Object.keys(pendingEcarts)) await pousserEcart(logement);
+}
+
+async function ecarter(logement) {
+  const l = LISTINGS.find(x => (x.logementId || x.id) === logement) || LISTINGS.find(x => x.id === logement);
+  const ids = l ? [l.id].concat((l.autres || []).map(a => a.id)) : [logement];
+  pendingEcarts[logement] = { action: 'ecarter', date: new Date().toISOString(), ids, titre: l?.title || '' };
+  savePending();
+  renderAll();
+  showToast('Annonce écartée', 'Annuler', () => restaurer(logement));
+  await pousserEcart(logement);
+}
+
+async function restaurer(logement) {
+  const p = pendingEcarts[logement];
+  if (p?.action === 'ecarter' && !envoisEnCours.has(logement)) {
+    delete pendingEcarts[logement];  // jamais partie vers le Sheet : rien à annuler là-bas
+    savePending(); renderAll(); showToast('Annonce restaurée');
+    return;
+  }
+  pendingEcarts[logement] = { action: 'restaurer', date: new Date().toISOString() };
+  savePending(); renderAll(); showToast('Annonce restaurée');
+  await pousserEcart(logement);
+}
+
+const envoisEnCours = new Set();
+async function pousserEcart(logement) {
+  if (!getScriptUrl()) { renderScriptStatus(); return; }
+  const p = pendingEcarts[logement];
+  if (!p || envoisEnCours.has(logement)) return;  // la réponse en vol enchaînera sur la demande la plus récente
+  envoisEnCours.add(logement);
+  try {
+    const rep = await envoyerAuScript({ action: p.action, logement, ids: p.ids || [], titre: p.titre || '' });
+    if (p.action === 'ecarter') ECARTEES.set(logement, { logement, date: rep.date ? new Date(rep.date) : new Date(p.date), purgee: false });
+    else ECARTEES.delete(logement);
+    if (pendingEcarts[logement] === p) delete pendingEcarts[logement];
+    savePending(); saveCache(); renderAll();
+  } catch (e) {
+    if (e.definitif) { if (pendingEcarts[logement] === p) delete pendingEcarts[logement]; savePending(); renderAll(); showToast(`Script : ${e.message}`); }
+    else { console.warn('Envoi au script impossible, réessai plus tard :', e.message); renderScriptStatus(); return; }
+  } finally {
+    envoisEnCours.delete(logement);
+  }
+  if (pendingEcarts[logement]) await pousserEcart(logement);  // l'utilisateur a changé d'avis pendant l'envoi
+}
+
+function showToast(message, actionLabel, actionFn) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<span>${esc(message)}</span>${actionLabel ? `<button>${esc(actionLabel)}</button>` : ''}`;
+  if (actionLabel) t.querySelector('button').onclick = () => { t.remove(); actionFn && actionFn(); };
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), actionLabel ? 6000 : 3000);
 }
 
 function renderFilters() {
@@ -1358,9 +1605,20 @@ function renderFavs() {
     : favListings.map(createCard).join('');
 }
 
+function renderEcartees() {
+  const container = document.getElementById('ecartees-container');
+  const liste = ecarteesListings();
+  document.getElementById('ecartees-badge').textContent = liste.length;
+  document.getElementById('ecartees-retention').textContent = ECARTEES_JOURS;
+  container.innerHTML = liste.length === 0
+    ? `<div class="empty"><div class="empty-icon">🗑️</div><div class="empty-title">Rien d'écarté</div><div class="empty-sub">Appuyez sur 🗑 sur une annonce<br>pour la retirer du fil</div></div>`
+    : liste.map(l => createCard(l, { ecartee: true })).join('');
+}
+
 function renderStats() {
-  const newToday = LISTINGS.filter(l => l.isNew).length;
-  document.getElementById('stat-total').textContent = LISTINGS.length;
+  const actives = LISTINGS.filter(l => !isEcartee(l));
+  const newToday = actives.filter(l => l.isNew).length;
+  document.getElementById('stat-total').textContent = actives.length;
   document.getElementById('stat-total-lbl').textContent = RAW_LISTINGS.length > LISTINGS.length
     ? `Logements (${RAW_LISTINGS.length} annonces)` : 'Annonces trouvées';
   document.getElementById('stat-new').textContent = newToday;
@@ -1368,6 +1626,49 @@ function renderStats() {
   document.getElementById('stat-sync').textContent = syncText;
   document.getElementById('last-sync-text').textContent = `Dernière synchro : ${syncText}`;
   document.getElementById('sheet-id-input').value = localStorage.getItem('sheet-id') || '';
+  const urlInput = document.getElementById('script-url-input');
+  if (document.activeElement !== urlInput) urlInput.value = localStorage.getItem('script-url') || DEFAULT_SCRIPT_URL;
+  const keyInput = document.getElementById('script-key-input');
+  if (document.activeElement !== keyInput) keyInput.value = getScriptKey();
+  renderScriptStatus();
+}
+
+function renderScriptStatus(texte) {
+  const el = document.getElementById('script-status');
+  if (!el) return;
+  const enAttente = Object.keys(pendingEcarts).length;
+  if (texte) { el.textContent = texte; return; }
+  if (!getScriptUrl()) {
+    el.textContent = enAttente
+      ? `⚠️ Script non configuré — ${enAttente} suppression${enAttente > 1 ? 's' : ''} connue${enAttente > 1 ? 's' : ''} de ce téléphone seulement (le job et l'autre téléphone ne les voient pas).`
+      : 'Script non configuré — les suppressions resteront sur ce téléphone seulement.';
+  } else {
+    const n = nbLogementsEcartes();
+    el.textContent = `✓ Script configuré · ${n} logement${n > 1 ? 's' : ''} écarté${n > 1 ? 's' : ''} dans le Sheet`
+      + (enAttente ? ` · ${enAttente} en attente d'envoi (réessai à la prochaine synchro)` : '');
+  }
+}
+
+async function saveScriptConfig() {
+  const url = document.getElementById('script-url-input').value.trim();
+  const key = document.getElementById('script-key-input').value;
+  if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) {
+    showToast("L'URL doit être celle du déploiement : https://script.google.com/macros/s/…/exec");
+    return;
+  }
+  if (url) localStorage.setItem('script-url', url); else localStorage.removeItem('script-url');
+  if (key) localStorage.setItem('script-key', key); else localStorage.removeItem('script-key');
+  if (!url) { renderScriptStatus(); return; }
+  renderScriptStatus('⏳ Test du script…');
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    const json = JSON.parse(await res.text());
+    if (json.service !== 'paris-immo-ecartees') throw new Error('ce script ne répond pas comme attendu');
+    showToast(`Script joignable · ${json.ecartees} annonce${json.ecartees > 1 ? 's' : ''} écartée${json.ecartees > 1 ? 's' : ''}`);
+    await refreshListings({ manual: true });
+  } catch (e) {
+    renderScriptStatus(`⚠️ Script injoignable : ${e.message}. Vérifie l'URL (…/exec) et que le déploiement est accessible à « Tout le monde ».`);
+  }
 }
 
 function renderAll(error) {
@@ -1375,6 +1676,7 @@ function renderAll(error) {
   renderCards(error);
   renderSources();
   renderFavs();
+  renderEcartees();
   renderStats();
 }
 
@@ -1385,19 +1687,24 @@ function switchTab(name, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
+  const navs = document.querySelectorAll('.nav-item');
+  navs.forEach(n => n.classList.remove('active'));
+  navs[SECTIONS.indexOf(name)]?.classList.add('active');
   if (name === 'favoris') renderFavs();
+  if (name === 'ecartees') renderEcartees();
 }
 
+const SECTIONS = ['annonces', 'favoris', 'ecartees', 'criteres', 'config'];  // même ordre que .tab et .nav-item
 function switchSection(name, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  el.classList.add('active');
-  const tabMap = { annonces: 0, favoris: 1, criteres: 2, config: 3 };
+  (el || document.querySelectorAll('.nav-item')[SECTIONS.indexOf(name)]).classList.add('active');
   const tabs = document.querySelectorAll('.tab');
   tabs.forEach(t => t.classList.remove('active'));
-  tabs[tabMap[name]].classList.add('active');
+  tabs[SECTIONS.indexOf(name)].classList.add('active');
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'favoris') renderFavs();
+  if (name === 'ecartees') renderEcartees();
 }
 
 function filterCards(filter, el) {
@@ -1457,14 +1764,21 @@ function setNotifStatus(state, detail) {
   const labels = {
     on:          ['<div class="status-dot"></div><span>Notifs actives</span>', '✅ Notifications actives sur cet appareil.'],
     off:         ['<span style="opacity:0.6">🔕 Notifs off</span>', 'Les notifications ne sont pas encore activées sur cet appareil.'],
-    denied:      ['<span style="opacity:0.6">🔕 Notifs refusées</span>', '⛔ Autorisation refusée. Réautorise les notifications dans les paramètres du site (Chrome → ⋮ → Infos sur la page), puis réessaie.'],
+    denied:      ['<span style="opacity:0.6">🔕 Notifs refusées</span>', IS_IOS
+                    ? '⛔ Autorisation refusée. Sur iPhone : Réglages → Notifications → Paris Immo → Autoriser, puis réessaie ici.'
+                    : '⛔ Autorisation refusée. Réautorise les notifications dans les paramètres du site (Chrome → ⋮ → Infos sur la page), puis réessaie.'],
     unsupported: ['<span style="opacity:0.6">🔕 Non supporté</span>', 'Ce navigateur ne supporte pas les notifications push. Sur Android, installe l\'app depuis Chrome ; sur iPhone, ajoute-la à l\'écran d\'accueil depuis Safari.'],
+    install:     ['<span style="opacity:0.6">📥 À installer</span>', '📥 Sur iPhone, les notifications ne marchent que dans l\'app installée : Safari → Partager ⎋ → « Sur l\'écran d\'accueil », puis ouvre Paris Immo depuis l\'écran d\'accueil et reviens ici.'],
     error:       ['<span style="opacity:0.6">⚠️ Notifs</span>', '⚠️ Erreur : ' + (detail || 'inconnue')],
   };
   const [pillHtml, text] = labels[state] || labels.off;
   if (pill) pill.innerHTML = pillHtml;
   if (card) card.textContent = text;
-  if (banner) banner.style.display = state === 'on' ? 'none' : '';
+  if (banner) {
+    banner.style.display = state === 'on' ? 'none' : '';
+    if (state === 'install') banner.querySelector('div').innerHTML =
+      '<div style="font-weight:500;font-size:13px">Installer l\'app pour les alertes</div><div style="font-size:12px;opacity:0.75">Safari → Partager ⎋ → « Sur l\'écran d\'accueil »</div>';
+  }
   const btn = document.getElementById('notif-btn');
   if (btn) btn.style.display = state === 'on' ? 'none' : '';
 }
@@ -1496,6 +1810,8 @@ async function shareToken() {
 }
 
 async function enableNotifications(fromUser) {
+  // iOS : le push web n'existe que dans l'app ajoutée à l'écran d'accueil (iOS 16.4+), jamais dans un onglet Safari
+  if (IS_IOS && !IS_STANDALONE) { setNotifStatus('install'); if (fromUser) switchSection('config'); return; }
   if (!('Notification' in window) || !('serviceWorker' in navigator)) { setNotifStatus('unsupported'); return; }
   try {
     let permission = Notification.permission;
@@ -1554,14 +1870,14 @@ function showInAppAlert(title, body, url) {
 async function focusAnnonce(id) {
   if (!id) return;
   if (!LISTINGS.some(l => l.id === id)) await refreshListings();
-  const navAnnonces = document.querySelector('.nav-item');
-  if (navAnnonces) switchSection('annonces', navAnnonces);
-  activeFilter = 'all';
   const listing = LISTINGS.find(l => l.id === id);
+  const ecartee = listing && isEcartee(listing);
+  switchSection(ecartee ? 'ecartees' : 'annonces');
+  activeFilter = 'all';
   if (listing) toggleState[listing.source] = true;
   renderFilters();
   renderCards();
-  const card = document.querySelector(`#cards-container .card[data-id="${CSS.escape(id)}"]`);
+  const card = document.querySelector(`#${ecartee ? 'ecartees-container' : 'cards-container'} .card[data-id="${CSS.escape(id)}"]`);
   if (!card) { showInAppAlert('Annonce introuvable', "Elle n'est plus dans la liste (retirée ou filtrée)."); return; }
   document.querySelectorAll('.card.highlight').forEach(c => c.classList.remove('highlight'));
   card.classList.add('highlight');

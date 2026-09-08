@@ -779,6 +779,16 @@
     box-shadow: 0 0 0 6px rgba(200,169,110,0.25), var(--shadow);
     transition: box-shadow 0.4s ease, outline-color 0.4s ease;
   }
+  .card-autres {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 0 16px 12px; font-size: 11px; color: var(--ink3);
+  }
+  .autre-src {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 999px; border: 1.5px solid var(--border);
+    background: var(--surface2); color: var(--ink); text-decoration: none; font-size: 11px; font-weight: 500;
+  }
+  .autre-src .dot { width: 7px; height: 7px; border-radius: 50%; }
   .notif-banner {
     display: flex; align-items: center; gap: 12px;
     background: var(--ink); color: white; border-radius: 14px;
@@ -931,7 +941,7 @@
   <div class="stats-row">
     <div class="stat-card">
       <div class="stat-val" id="stat-total">0</div>
-      <div class="stat-lbl">Annonces trouvées</div>
+      <div class="stat-lbl" id="stat-total-lbl">Annonces trouvées</div>
     </div>
     <div class="stat-card">
       <div class="stat-val" id="stat-new">0</div>
@@ -1064,7 +1074,8 @@ const SOURCE_STYLES = {
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 
-let LISTINGS = [];
+let RAW_LISTINGS = [];   // une entrée par annonce (ligne du Sheet)
+let LISTINGS = [];       // une entrée par logement (annonces rattachées regroupées sous `autres`)
 let favorites = (JSON.parse(localStorage.getItem('immo-favs') || '[]')).filter(f => typeof f === 'string');
 let activeFilter = 'all';
 let toggleState = JSON.parse(localStorage.getItem('immo-sources') || '{}');
@@ -1136,22 +1147,46 @@ function rowToListing(row) {
     photo: pick('photourl') || null,
     metro: pick('metro') || null,
     url: pick('urlannonce', 'url') || '#',
+    logement: String(pick('logement') || '') || null,
   };
+}
+
+// Regroupe les annonces d'un même appartement (colonne Logement du Sheet, remplie par le job)
+function grouper(listings) {
+  const groupes = new Map();
+  for (const l of listings) {
+    const cle = l.logement || l.id;
+    if (!groupes.has(cle)) groupes.set(cle, []);
+    groupes.get(cle).push(l);
+  }
+  const out = [];
+  for (const [cle, membres] of groupes) {
+    membres.sort((a, b) => (a.detected?.getTime() || 0) - (b.detected?.getTime() || 0));
+    const principal = membres.find(m => m.id === cle) || membres[0];
+    principal.autres = membres.filter(m => m !== principal).map(m => ({
+      id: m.id, source: m.source, sourceName: m.sourceName, url: m.url, price: m.price, detected: m.detected,
+    }));
+    const prix = membres.map(m => m.price).filter(p => p > 0);
+    principal.prixMin = prix.length ? Math.min(...prix) : principal.price;
+    out.push(principal);
+  }
+  return out;
 }
 
 function loadCache() {
   try {
     const cached = JSON.parse(localStorage.getItem('immo-cache') || 'null');
     if (cached && Array.isArray(cached.listings)) {
-      LISTINGS = cached.listings.map(l => ({ ...l, detected: l.detected ? new Date(l.detected) : null }));
-      LISTINGS.forEach(l => { l.isNew = l.detected ? (Date.now() - l.detected.getTime()) < NEW_WINDOW_MS : false; });
+      RAW_LISTINGS = cached.listings.map(l => ({ ...l, autres: undefined, detected: l.detected ? new Date(l.detected) : null }));
+      RAW_LISTINGS.forEach(l => { l.isNew = l.detected ? (Date.now() - l.detected.getTime()) < NEW_WINDOW_MS : false; });
+      LISTINGS = grouper(RAW_LISTINGS);
       lastSync = cached.lastSync ? new Date(cached.lastSync) : null;
     }
   } catch (e) { /* cache illisible → on repart de zéro */ }
 }
 
 function saveCache() {
-  try { localStorage.setItem('immo-cache', JSON.stringify({ listings: LISTINGS, lastSync })); } catch (e) { /* quota */ }
+  try { localStorage.setItem('immo-cache', JSON.stringify({ listings: RAW_LISTINGS.map(({ autres, prixMin, ...l }) => l), lastSync })); } catch (e) { /* quota */ }
 }
 
 async function refreshListings({ manual = false } = {}) {
@@ -1161,7 +1196,8 @@ async function refreshListings({ manual = false } = {}) {
     const rows = await fetchSheetRows(getSheetId());
     const listings = rows.map(rowToListing).filter(Boolean);
     listings.sort((a, b) => (b.detected?.getTime() || 0) - (a.detected?.getTime() || 0));
-    LISTINGS = listings;
+    RAW_LISTINGS = listings;
+    LISTINGS = grouper(listings);
     lastSync = new Date();
     saveCache();
     renderAll();
@@ -1183,7 +1219,7 @@ function sourceStyle(id) {
 
 function activeSources() {
   const seen = new Map();
-  LISTINGS.forEach(l => seen.set(l.source, (seen.get(l.source) || 0) + 1));
+  RAW_LISTINGS.forEach(l => seen.set(l.source, (seen.get(l.source) || 0) + 1));
   return [...seen.entries()].map(([id, count]) => ({ id, count, ...sourceStyle(id) }));
 }
 
@@ -1234,7 +1270,13 @@ function createCard(listing) {
       <div class="card-tags">
         ${listing.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}
         ${listing.hasParking ? '<span class="tag highlight">🚗 Parking</span>' : ''}
+        ${listing.prixMin && listing.prixMin < listing.price ? `<span class="tag highlight">📉 dès ${listing.prixMin.toLocaleString('fr-FR')} €</span>` : ''}
       </div>
+      ${(listing.autres || []).length ? `
+      <div class="card-autres">Aussi sur
+        ${listing.autres.map(a => `<a class="autre-src" href="${esc(a.url)}" target="_blank" rel="noopener">
+          <span class="dot" style="background:${sourceStyle(a.source).color}"></span>${esc(sourceStyle(a.source).name)}${a.price && a.price !== listing.price ? ` · ${a.price.toLocaleString('fr-FR')} €` : ''}</a>`).join('')}
+      </div>` : ''}
       <div class="card-footer">
         <span class="card-date">${esc(formatDate(listing.detected))}</span>
         <div class="card-actions">
@@ -1245,8 +1287,10 @@ function createCard(listing) {
     </div>`;
 }
 
+function sourcesDe(l) { return [l.source].concat((l.autres || []).map(a => a.source)); }
+
 function visibleListings() {
-  return LISTINGS.filter(l => toggleState[l.source] !== false);
+  return LISTINGS.filter(l => sourcesDe(l).some(src => toggleState[src] !== false));
 }
 
 function renderFilters() {
@@ -1261,7 +1305,7 @@ function renderFilters() {
 function renderCards(error) {
   const container = document.getElementById('cards-container');
   const visible = visibleListings();
-  const filtered = activeFilter === 'all' ? visible : visible.filter(l => l.source === activeFilter);
+  const filtered = activeFilter === 'all' ? visible : visible.filter(l => sourcesDe(l).includes(activeFilter));
   if (error && LISTINGS.length === 0) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Données indisponibles</div><div class="empty-sub">${esc(error)}</div></div>`;
   } else if (filtered.length === 0) {
@@ -1310,6 +1354,8 @@ function renderFavs() {
 function renderStats() {
   const newToday = LISTINGS.filter(l => l.isNew).length;
   document.getElementById('stat-total').textContent = LISTINGS.length;
+  document.getElementById('stat-total-lbl').textContent = RAW_LISTINGS.length > LISTINGS.length
+    ? `Logements (${RAW_LISTINGS.length} annonces)` : 'Annonces trouvées';
   document.getElementById('stat-new').textContent = newToday;
   const syncText = lastSync ? formatDate(lastSync).replace(/^Aujourd'hui, /, "aujourd'hui à ").replace(/^Hier, /, 'hier à ') : 'jamais';
   document.getElementById('stat-sync').textContent = syncText;

@@ -887,14 +887,18 @@
       <span class="criteria-lbl">Arrondissements</span>
       <div>
         <div class="arr-grid" style="justify-content:flex-end">
-          <span class="arr-pill">1er</span><span class="arr-pill">2e</span><span class="arr-pill">3e</span>
-          <span class="arr-pill">4e</span><span class="arr-pill">5e</span><span class="arr-pill">6e</span>
-          <span class="arr-pill">7e</span><span class="arr-pill">8e</span><span class="arr-pill">9e</span>
-          <span class="arr-pill">10e</span><span class="arr-pill">11e</span><span class="arr-pill">12e</span>
-          <span class="arr-pill">13e</span><span class="arr-pill">14e</span><span class="arr-pill">15e</span>
-          <span class="arr-pill">16e</span><span class="arr-pill">17e</span><span class="arr-pill">18e</span>
+          <span class="arr-pill">8e</span><span class="arr-pill">9e</span><span class="arr-pill">10e</span>
+          <span class="arr-pill">11e</span><span class="arr-pill">12e</span><span class="arr-pill">17e</span>
         </div>
-        <div style="font-size:11px;color:var(--ink3);text-align:right;margin-top:6px">Hors 19e et 20e</div>
+      </div>
+    </div>
+    <div class="criteria-row">
+      <span class="criteria-lbl">Est parisien</span>
+      <div style="text-align:right">
+        <div class="arr-grid" style="justify-content:flex-end">
+          <span class="arr-pill">Vincennes</span><span class="arr-pill">Saint-Mandé</span>
+          <span class="arr-pill">Saint-Maur-des-Fossés</span><span class="arr-pill">Joinville-le-Pont</span>
+        </div>
       </div>
     </div>
   </div>
@@ -911,7 +915,7 @@
     </div>
     <div class="criteria-row">
       <span class="criteria-lbl">Surface</span>
-      <span class="criteria-val">40 m² minimum</span>
+      <span class="criteria-val">48 m² minimum</span>
     </div>
     <div class="criteria-row">
       <span class="criteria-lbl">Meublé</span>
@@ -927,7 +931,7 @@
     <div class="criteria-title">💶 Budget</div>
     <div class="criteria-row">
       <span class="criteria-lbl">Loyer maximum</span>
-      <span class="criteria-val" style="font-size:18px;font-family:'Playfair Display',serif;color:var(--accent2)">2 200 €/mois</span>
+      <span class="criteria-val" style="font-size:18px;font-family:'Playfair Display',serif;color:var(--accent2)">2 000 €/mois</span>
     </div>
   </div>
 </div>
@@ -1132,8 +1136,10 @@ function rowToListing(row) {
   const arr = Number(pick('arrondissement')) || 0;
   const meuble = String(pick('meuble') || 'Non').toLowerCase() === 'oui';
   const parking = String(pick('parking') || 'Non').toLowerCase() === 'oui';
+  const codePostal = String(pick('codepostal') || '');
   const tags = [meuble ? 'Meublé' : 'Vide'];
   if (arr) tags.push(arr === 1 ? '1er arr.' : `${arr}e arr.`);
+  else if (codePostal) tags.push(codePostal);
   return {
     id,
     source: slug(sourceName),
@@ -1148,6 +1154,7 @@ function rowToListing(row) {
     metro: pick('metro') || null,
     url: pick('urlannonce', 'url') || '#',
     logement: String(pick('logement') || '') || null,
+    codePostal,
   };
 }
 

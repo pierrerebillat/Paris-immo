@@ -7,7 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#1a1a1a">
 <title>Paris Immo · Alertes</title>
-<link rel="manifest" href="#" crossorigin="use-credentials">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -771,6 +773,25 @@
     margin-top: 8px;
     line-height: 1.6;
   }
+
+  .notif-banner {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--ink); color: white; border-radius: 14px;
+    padding: 12px 14px; margin: 0 20px 14px; cursor: pointer;
+    box-shadow: var(--shadow); animation: fadeIn 0.3s ease;
+  }
+  .token-box {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px;
+    padding: 10px; word-break: break-all; color: var(--ink2); line-height: 1.5; user-select: all;
+  }
+  .btn-small {
+    flex: 1; padding: 9px 12px; background: var(--surface2); color: var(--ink);
+    border: 1.5px solid var(--border); border-radius: 10px; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; cursor: pointer;
+  }
+  .btn-small:active { opacity: 0.7; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; background: var(--surface2); padding: 1px 4px; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -779,17 +800,16 @@
 <div class="header">
   <div class="header-label">Recherche en cours</div>
   <div class="header-title">Paris <span>Immo</span></div>
-  <div class="header-sub">Alertes temps réel · 6 sources · toutes les 15 min</div>
+  <div class="header-sub" id="header-sub">Alertes temps réel · toutes les 15 min</div>
 </div>
 
 <!-- STATUS BAR -->
 <div class="status-bar">
-  <div class="status-pill">
-    <div class="status-dot"></div>
-    <span>Actif</span>
+  <div class="status-pill" id="notif-pill">
+    <span style="opacity:0.6">🔕 Notifs off</span>
   </div>
   <div class="status-pill">⏱ Toutes les 15 min</div>
-  <div class="status-pill">📋 <span id="total-count">12</span> annonces</div>
+  <div class="status-pill">📋 <span id="total-count">0</span> annonces</div>
 </div>
 
 <!-- TABS -->
@@ -804,18 +824,19 @@
 <div id="tab-annonces" class="section active">
   <div class="section-header">
     <div class="section-title">Annonces</div>
-    <span class="badge" id="new-badge">3 nouvelles</span>
+    <span class="badge" id="new-badge">À jour</span>
   </div>
 
-  <div class="filters">
-    <div class="filter-chip active" onclick="filterCards('all', this)">Toutes</div>
-    <div class="filter-chip" onclick="filterCards('pap', this)">PAP</div>
-    <div class="filter-chip" onclick="filterCards('leboncoin', this)">LeBonCoin</div>
-    <div class="filter-chip" onclick="filterCards('laforet', this)">La Forêt</div>
-    <div class="filter-chip" onclick="filterCards('century21', this)">Century 21</div>
-    <div class="filter-chip" onclick="filterCards('orpi', this)">Orpi</div>
-    <div class="filter-chip" onclick="filterCards('logicimmo', this)">Logic-Immo</div>
+  <div class="notif-banner" id="notif-banner" onclick="enableNotifications(true)">
+    <span style="font-size:20px">🔔</span>
+    <div>
+      <div style="font-weight:500;font-size:13px">Activer les alertes push</div>
+      <div style="font-size:12px;opacity:0.75">Pour recevoir chaque nouvelle annonce sur ce téléphone</div>
+    </div>
+    <span style="margin-left:auto;font-size:18px">›</span>
   </div>
+
+  <div class="filters" id="filters"></div>
 
   <div id="cards-container"></div>
 </div>
@@ -904,11 +925,11 @@
 
   <div class="stats-row">
     <div class="stat-card">
-      <div class="stat-val" id="stat-total">12</div>
+      <div class="stat-val" id="stat-total">0</div>
       <div class="stat-lbl">Annonces trouvées</div>
     </div>
     <div class="stat-card">
-      <div class="stat-val" id="stat-new">3</div>
+      <div class="stat-val" id="stat-new">0</div>
       <div class="stat-lbl">Nouvelles aujourd'hui</div>
     </div>
     <div class="stat-card accent-card">
@@ -925,43 +946,52 @@
     <div id="sources-list"></div>
   </div>
 
-  <button class="refresh-btn" onclick="simulateRefresh()" id="refresh-btn">
+  <button class="refresh-btn" onclick="refreshListings({manual:true})" id="refresh-btn">
     <span>↻</span> Actualiser maintenant
   </button>
 
   <div class="last-sync" id="last-sync-text">Dernière synchro : jamais</div>
 
   <div class="criteria-card">
-    <div class="criteria-title">⚙️ Script Google Apps Script</div>
+    <div class="criteria-title">🔔 Notifications push</div>
+    <div id="notif-status" style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:10px">Les notifications ne sont pas encore activées sur cet appareil.</div>
+    <button class="refresh-btn" id="notif-btn" onclick="enableNotifications(true)" style="margin:0 0 12px">
+      <span>🔔</span> Activer les notifications
+    </button>
+    <div class="step-title" style="margin-bottom:6px">Token de cet appareil</div>
+    <div class="token-box" id="token-box">Aucun token — active d'abord les notifications.</div>
+    <div id="token-actions" style="display:none;margin-top:8px;gap:8px">
+      <button class="btn-small" onclick="copyToken()">📋 Copier</button>
+      <button class="btn-small" onclick="shareToken()">📤 Partager</button>
+    </div>
+    <div style="font-size:12px;color:var(--ink3);line-height:1.5;margin-top:8px">
+      Envoie ce token sur l'ordinateur qui fait tourner le job, colle-le dans <code>FCM_TOKENS</code> du fichier <code>.env</code>, puis relance le job : il abonne l'appareil au topic <code>paris-immo-alertes</code>.
+    </div>
+  </div>
+
+  <div class="criteria-card">
+    <div class="criteria-title">🖥️ Connexion au job local</div>
     <div class="setup-step">
       <div class="step-num">1</div>
       <div class="step-content">
-        <div class="step-title">Créer un Google Sheet</div>
-        <div class="step-desc">Va sur Google Sheets et crée un nouveau classeur nommé <strong>"Paris Immo"</strong>. Note son ID dans l'URL.</div>
+        <div class="step-title">Le job tourne sur pr-small</div>
+        <div class="step-desc">Un conteneur Docker scrape les sites toutes les 15 min, écrit dans le Google Sheet « Paris Immo » et envoie les notifications.</div>
       </div>
     </div>
     <div class="setup-step">
       <div class="step-num">2</div>
       <div class="step-content">
-        <div class="step-title">Ouvrir Apps Script</div>
-        <div class="step-desc">Dans le Sheet : <strong>Extensions → Apps Script</strong>. Colle le script fourni ci-dessous.</div>
-        <a href="https://script.google.com" class="step-link">↗ script.google.com</a>
+        <div class="step-title">Le Sheet est lisible par l'app</div>
+        <div class="step-desc">Partage du classeur : <strong>Tous les utilisateurs disposant du lien → Lecteur</strong>. L'app le lit directement, sans serveur intermédiaire.</div>
       </div>
     </div>
     <div class="setup-step">
       <div class="step-num">3</div>
       <div class="step-content">
-        <div class="step-title">Lancer le déclencheur toutes les 15 min</div>
-        <div class="step-desc">Dans Apps Script : <strong>Déclencheurs → + Ajouter</strong> → Événement temporel → Toutes les minutes → <strong>Toutes les 15 minutes</strong>.</div>
-      </div>
-    </div>
-    <div class="setup-step">
-      <div class="step-num">4</div>
-      <div class="step-content">
-        <div class="step-title">Connecter cette app</div>
-        <div class="step-desc">Colle l'ID de ton Google Sheet dans le champ ci-dessous pour que l'app lise les données en temps réel.</div>
+        <div class="step-title">Autre classeur ?</div>
+        <div class="step-desc">Laisse vide pour utiliser le Sheet par défaut, ou colle l'ID d'un autre classeur.</div>
         <div style="margin-top:10px;display:flex;gap:8px">
-          <input id="sheet-id-input" type="text" placeholder="ID du Google Sheet…" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--bg)">
+          <input id="sheet-id-input" type="text" placeholder="ID du Google Sheet (optionnel)" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--bg)">
           <button onclick="saveSheetId()" style="padding:10px 14px;background:var(--ink);color:white;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">OK</button>
         </div>
       </div>
@@ -999,261 +1029,295 @@
 </div>
 
 <script>
-// ─── DATA ───────────────────────────────────────────────────────────────────
+// ─── CONFIGURATION ───────────────────────────────────────────────────────────
 
-const SOURCES = [
-  { id: 'pap', name: 'PAP.fr', color: '#2563eb', icon: 'P', count: '4 annonces' },
-  { id: 'leboncoin', name: 'LeBonCoin', color: '#f97316', icon: 'L', count: '3 annonces' },
-  { id: 'laforet', name: 'La Forêt', color: '#16a34a', icon: 'F', count: '2 annonces' },
-  { id: 'century21', name: 'Century 21', color: '#7c3aed', icon: 'C', count: '1 annonce' },
-  { id: 'orpi', name: 'Orpi', color: '#dc2626', icon: 'O', count: '1 annonce' },
-  { id: 'logicimmo', name: 'Logic-Immo', color: '#0891b2', icon: 'LI', count: '1 annonce' },
-];
+// Google Sheet alimenté par le job local (pr-small). Doit être partagé en lecture
+// (« Tous les utilisateurs disposant du lien : Lecteur ») pour que l'app puisse le lire.
+const DEFAULT_SHEET_ID = '1gQuCClnnOJ1b1t_VwtgiQ2qchCq-QALxrmtsX5PI6Ts';
+const SHEET_TAB = 'Annonces';
+const REFRESH_EVERY_MS = 5 * 60 * 1000;     // rafraîchissement auto quand l'app est ouverte
+const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;  // « nouveau » = détecté depuis moins de 24 h
 
-const MOCK_LISTINGS = [
-  {
-    id: 1, source: 'pap', isNew: true,
-    title: 'Bel appartement lumineux avec parquet',
-    address: '9e arr. · Rue de Navarin',
-    rooms: 3, surface: 58, price: 1850,
-    tags: ['Vide', '3e étage', 'Parquet', 'Double vitrage'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/1457842/pexels-photo-1457842.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Saint-Georges', lines: [{num:'12', bg:'#007852', fg:'#fff'}], dist: '2 min à pied' },
-    date: "Aujourd'hui, 09:12", url: 'https://pap.fr'
-  },
-  {
-    id: 2, source: 'leboncoin', isNew: true,
-    title: 'T2 refait à neuf, calme et lumineux',
-    address: '17e arr. · Bd des Batignolles',
-    rooms: 2, surface: 44, price: 1680,
-    tags: ['Vide', 'RDC surélevé', 'Cave'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/1648776/pexels-photo-1648776.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Place de Clichy', lines: [{num:'2', bg:'#003f8c', fg:'#fff'},{num:'13', bg:'#6ec4e8', fg:'#000'}], dist: '4 min à pied' },
-    date: "Aujourd'hui, 08:45", url: 'https://leboncoin.fr'
-  },
-  {
-    id: 3, source: 'laforet', isNew: true,
-    title: 'Grand 3P avec parking privatif',
-    address: '8e arr. · Rue de la Pépinière',
-    rooms: 3, surface: 72, price: 2150,
-    tags: ['Vide', 'Parking', 'Gardien', '2e étage'],
-    hasParking: true,
-    photo: 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Saint-Lazare', lines: [{num:'3', bg:'#9f9825', fg:'#fff'},{num:'12', bg:'#007852', fg:'#fff'},{num:'13', bg:'#6ec4e8', fg:'#000'}], dist: '3 min à pied' },
-    date: "Aujourd'hui, 07:30", url: 'https://laforet.com'
-  },
-  {
-    id: 4, source: 'pap', isNew: false,
-    title: 'Appartement haussmannien 3 pièces',
-    address: '10e arr. · Rue du Faubourg Poissonnière',
-    rooms: 3, surface: 65, price: 1950,
-    tags: ['Vide', 'Moulures', 'Hauteur sous plafond', 'Parquet'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/2121121/pexels-photo-2121121.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Bonne Nouvelle', lines: [{num:'8', bg:'#d282be', fg:'#fff'},{num:'9', bg:'#cdb900', fg:'#000'}], dist: '3 min à pied' },
-    date: 'Hier, 18:22', url: 'https://pap.fr'
-  },
-  {
-    id: 5, source: 'century21', isNew: false,
-    title: 'T3 calme côté cour',
-    address: '15e arr. · Rue de Lourmel',
-    rooms: 3, surface: 55, price: 1780,
-    tags: ['Vide', 'Cour', '1er étage'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Lourmel', lines: [{num:'8', bg:'#d282be', fg:'#fff'}], dist: '1 min à pied' },
-    date: 'Hier, 15:10', url: 'https://century21.fr'
-  },
-  {
-    id: 6, source: 'orpi', isNew: false,
-    title: '2 pièces moderne, proche métro',
-    address: '12e arr. · Rue de Reuilly',
-    rooms: 2, surface: 41, price: 1490,
-    tags: ['Vide', 'Digicode', 'Interphone'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/3214064/pexels-photo-3214064.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Reuilly - Diderot', lines: [{num:'1', bg:'#f2c200', fg:'#000'},{num:'8', bg:'#d282be', fg:'#fff'}], dist: '2 min à pied' },
-    date: 'Hier, 11:05', url: 'https://orpi.com'
-  },
-  {
-    id: 7, source: 'logicimmo', isNew: false,
-    title: 'Grand T2 lumineux avec balcon',
-    address: '11e arr. · Rue Oberkampf',
-    rooms: 2, surface: 48, price: 1620,
-    tags: ['Vide', 'Balcon', '4e étage', 'Ascenseur'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/1428348/pexels-photo-1428348.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Parmentier', lines: [{num:'3', bg:'#9f9825', fg:'#fff'}], dist: '3 min à pied' },
-    date: 'Il y a 2 jours', url: 'https://logic-immo.com'
-  },
-  {
-    id: 8, source: 'pap', isNew: false,
-    title: 'Appartement 3P avec parking et cave',
-    address: '18e arr. · Rue Lepic',
-    rooms: 3, surface: 62, price: 2080,
-    tags: ['Vide', 'Parking', 'Cave', 'Vue dégagée'],
-    hasParking: true,
-    photo: 'https://images.pexels.com/photos/279746/pexels-photo-279746.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Blanche', lines: [{num:'2', bg:'#003f8c', fg:'#fff'}], dist: '2 min à pied' },
-    date: 'Il y a 2 jours', url: 'https://pap.fr'
-  },
-  {
-    id: 9, source: 'leboncoin', isNew: false,
-    title: 'Beau 2P, Montmartre, calme',
-    address: '18e arr. · Rue Caulaincourt',
-    rooms: 2, surface: 43, price: 1550,
-    tags: ['Vide', 'Parquet', '2e étage'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/1080696/pexels-photo-1080696.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Lamarck - Caulaincourt', lines: [{num:'12', bg:'#007852', fg:'#fff'}], dist: '1 min à pied' },
-    date: 'Il y a 3 jours', url: 'https://leboncoin.fr'
-  },
-  {
-    id: 10, source: 'pap', isNew: false,
-    title: 'T3 haussmannien avec cheminée',
-    address: '6e arr. · Rue de Buci',
-    rooms: 3, surface: 70, price: 2190,
-    tags: ['Vide', 'Cheminée', 'Parquet', 'Moulures'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/2029694/pexels-photo-2029694.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Mabillon', lines: [{num:'10', bg:'#c9910a', fg:'#fff'}], dist: '2 min à pied' },
-    date: 'Il y a 4 jours', url: 'https://pap.fr'
-  },
-  {
-    id: 11, source: 'leboncoin', isNew: false,
-    title: '2P refait, quartier Marais',
-    address: '4e arr. · Rue des Archives',
-    rooms: 2, surface: 42, price: 1720,
-    tags: ['Vide', 'Refait neuf', 'Cuisine équipée'],
-    hasParking: false,
-    photo: 'https://images.pexels.com/photos/1571468/pexels-photo-1571468.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Rambuteau', lines: [{num:'11', bg:'#8d5e2a', fg:'#fff'}], dist: '3 min à pied' },
-    date: 'Il y a 5 jours', url: 'https://leboncoin.fr'
-  },
-  {
-    id: 12, source: 'laforet', isNew: false,
-    title: 'Appartement 2P avec box parking',
-    address: '13e arr. · Avenue d\'Italie',
-    rooms: 2, surface: 50, price: 1890,
-    tags: ['Vide', 'Parking', 'Box fermé', '5e étage'],
-    hasParking: true,
-    photo: 'https://images.pexels.com/photos/1669799/pexels-photo-1669799.jpeg?auto=compress&cs=tinysrgb&w=800',
-    metro: { name: 'Place d\'Italie', lines: [{num:'5', bg:'#f28e42', fg:'#fff'},{num:'6', bg:'#6eca97', fg:'#000'},{num:'7', bg:'#f3a4ba', fg:'#000'}], dist: '4 min à pied' },
-    date: 'Il y a 6 jours', url: 'https://laforet.com'
-  },
-];
+const firebaseConfig = {
+  apiKey: "AIzaSyBUJUwmAALNCtlqKmz1FTBUew9Rv_0rEWo",
+  authDomain: "paris-immo-26595.firebaseapp.com",
+  projectId: "paris-immo-26595",
+  storageBucket: "paris-immo-26595.firebasestorage.app",
+  messagingSenderId: "305267172723",
+  appId: "1:305267172723:web:8b457a1bb4a7850f5d1106"
+};
+const VAPID_KEY = "BIZlXjcxGfwahyf7yXDJZYdw2dOatsK5xpr-jW33t6vXFD3i7o8fqeZ7xRCFhwXOkCGhdEhzX8h8JXKKiDJa0cM";
+
+// Couleurs par source (clé = nom normalisé, cf. slug())
+const SOURCE_STYLES = {
+  bienici:    { name: "Bien'ici",    color: '#d9282f', icon: 'B' },
+  seloger:    { name: 'SeLoger',     color: '#7c3aed', icon: 'S' },
+  figaroimmo: { name: 'Figaro Immo', color: '#0f766e', icon: 'F' },
+  pap:        { name: 'PAP.fr',      color: '#2563eb', icon: 'P' },
+  leboncoin:  { name: 'LeBonCoin',   color: '#f97316', icon: 'L' },
+};
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 
-let favorites = JSON.parse(localStorage.getItem('immo-favs') || '[]');
+let LISTINGS = [];
+let favorites = (JSON.parse(localStorage.getItem('immo-favs') || '[]')).filter(f => typeof f === 'string');
 let activeFilter = 'all';
-let toggleState = {};
-SOURCES.forEach(s => toggleState[s.id] = true);
+let toggleState = JSON.parse(localStorage.getItem('immo-sources') || '{}');
+let lastSync = null;
+let fcmToken = localStorage.getItem('fcm-token') || '';
+
+function getSheetId() { return localStorage.getItem('sheet-id') || DEFAULT_SHEET_ID; }
+
+// ─── DONNÉES : GOOGLE SHEET ─────────────────────────────────────────────────
+
+function slug(name) {
+  return String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+}
+
+function parseGvizDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  const m = /^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/.exec(String(v));
+  if (m) return new Date(+m[1], +m[2], +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+
+async function fetchSheetRows(sheetId) {
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_TAB)}&headers=1&_=${Date.now()}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const text = await res.text();
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if (start < 0 || end < 0 || text.trim().startsWith('<')) {
+    throw new Error("Le Sheet n'est pas lisible : vérifie qu'il est partagé « Tous les utilisateurs disposant du lien »");
+  }
+  const json = JSON.parse(text.slice(start, end + 1));
+  if (json.status === 'error') throw new Error(json.errors?.[0]?.detailed_message || 'Erreur Google Sheets');
+  const cols = json.table.cols.map(c => slug(c.label || c.id));
+  return json.table.rows.map(r => {
+    const o = {};
+    (r.c || []).forEach((cell, i) => { o[cols[i]] = cell ? (cell.v ?? null) : null; });
+    return o;
+  });
+}
+
+// Colonnes écrites par le job : ID, Date détection, Source, Titre, Adresse, Arrondissement,
+// Prix (€), Surface (m²), Pièces, Parking, Meublé, Photo URL, Métro, URL annonce
+function rowToListing(row) {
+  const pick = (...keys) => { for (const k of keys) { if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k]; } return null; };
+  const id = String(pick('id') || '');
+  if (!id) return null;
+  const detected = parseGvizDate(pick('datedetection'));
+  const sourceName = String(pick('source') || 'Autre');
+  const price = Number(pick('prix', 'prixeur', 'prixe')) || 0;
+  const surface = Number(pick('surfacem', 'surfacem2', 'surface')) || 0;
+  const rooms = Number(pick('pieces')) || 0;
+  const arr = Number(pick('arrondissement')) || 0;
+  const meuble = String(pick('meuble') || 'Non').toLowerCase() === 'oui';
+  const parking = String(pick('parking') || 'Non').toLowerCase() === 'oui';
+  const tags = [meuble ? 'Meublé' : 'Vide'];
+  if (arr) tags.push(arr === 1 ? '1er arr.' : `${arr}e arr.`);
+  return {
+    id,
+    source: slug(sourceName),
+    sourceName,
+    isNew: detected ? (Date.now() - detected.getTime()) < NEW_WINDOW_MS : false,
+    detected,
+    title: String(pick('titre') || 'Appartement'),
+    address: String(pick('adresse') || (arr ? `Paris ${arr}e arr.` : 'Paris')),
+    rooms, surface, price, tags,
+    hasParking: parking,
+    photo: pick('photourl') || null,
+    metro: pick('metro') || null,
+    url: pick('urlannonce', 'url') || '#',
+  };
+}
+
+function loadCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('immo-cache') || 'null');
+    if (cached && Array.isArray(cached.listings)) {
+      LISTINGS = cached.listings.map(l => ({ ...l, detected: l.detected ? new Date(l.detected) : null }));
+      LISTINGS.forEach(l => { l.isNew = l.detected ? (Date.now() - l.detected.getTime()) < NEW_WINDOW_MS : false; });
+      lastSync = cached.lastSync ? new Date(cached.lastSync) : null;
+    }
+  } catch (e) { /* cache illisible → on repart de zéro */ }
+}
+
+function saveCache() {
+  try { localStorage.setItem('immo-cache', JSON.stringify({ listings: LISTINGS, lastSync })); } catch (e) { /* quota */ }
+}
+
+async function refreshListings({ manual = false } = {}) {
+  const btn = document.getElementById('refresh-btn');
+  if (manual && btn) { btn.innerHTML = '<span class="spinning">↻</span> Actualisation…'; btn.disabled = true; }
+  try {
+    const rows = await fetchSheetRows(getSheetId());
+    const listings = rows.map(rowToListing).filter(Boolean);
+    listings.sort((a, b) => (b.detected?.getTime() || 0) - (a.detected?.getTime() || 0));
+    LISTINGS = listings;
+    lastSync = new Date();
+    saveCache();
+    renderAll();
+    if (manual && btn) { btn.innerHTML = '<span>✓</span> À jour'; btn.style.background = 'var(--green)'; }
+  } catch (e) {
+    console.error('Chargement du Sheet impossible :', e);
+    renderAll(e.message);
+    if (manual && btn) { btn.innerHTML = '<span>⚠️</span> Échec'; btn.style.background = 'var(--red)'; }
+  } finally {
+    if (manual && btn) setTimeout(() => { btn.innerHTML = '<span>↻</span> Actualiser maintenant'; btn.style.background = ''; btn.disabled = false; }, 2000);
+  }
+}
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 
-function getSourceColor(id) {
-  return SOURCES.find(s => s.id === id)?.color || '#666';
+function sourceStyle(id) {
+  return SOURCE_STYLES[id] || { name: LISTINGS.find(l => l.source === id)?.sourceName || id, color: '#6b6560', icon: (id || '?')[0].toUpperCase() };
 }
+
+function activeSources() {
+  const seen = new Map();
+  LISTINGS.forEach(l => seen.set(l.source, (seen.get(l.source) || 0) + 1));
+  return [...seen.entries()].map(([id, count]) => ({ id, count, ...sourceStyle(id) }));
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  const t = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day(new Date()) - day(d)) / 86400000);
+  if (days <= 0) return `Aujourd'hui, ${t}`;
+  if (days === 1) return `Hier, ${t}`;
+  if (days < 7) return `Il y a ${days} jours`;
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + `, ${t}`;
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function createCard(listing) {
   const isFav = favorites.includes(listing.id);
-  const sourceName = SOURCES.find(s => s.id === listing.source)?.name || listing.source;
+  const style = sourceStyle(listing.source);
   return `
-    <div class="card" data-source="${listing.source}" data-id="${listing.id}">
+    <div class="card" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}">
       <div class="card-photo">
         ${listing.photo
-          ? `<img src="${listing.photo}" alt="${listing.title}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\'photo-placeholder\'>🏠</div>'">`
+          ? `<img src="${esc(listing.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=\'photo-placeholder\'>🏠</div>'">`
           : `<div class="photo-placeholder">🏠</div>`}
         <div class="card-photo-overlay"></div>
         <div class="card-photo-badge">
           <div class="photo-source-badge">
-            <div class="photo-source-dot" style="background:${getSourceColor(listing.source)}"></div>
-            <span class="photo-source-name">${(SOURCES.find(s=>s.id===listing.source)?.name||listing.source).toUpperCase()}</span>
+            <div class="photo-source-dot" style="background:${style.color}"></div>
+            <span class="photo-source-name">${esc(style.name).toUpperCase()}</span>
           </div>
           ${listing.isNew ? '<span class="photo-new-badge">✦ NOUVEAU</span>' : ''}
         </div>
         <div class="card-photo-price">${listing.price.toLocaleString('fr-FR')} € <span>/mois</span></div>
       </div>
-      <div class="card-title">${listing.title}</div>
-      <div class="card-addr">📍 ${listing.address}</div>
+      <div class="card-title">${esc(listing.title)}</div>
+      <div class="card-addr">📍 ${esc(listing.address)}</div>
       ${listing.metro ? `
       <div class="card-metro">
         <div class="metro-icon">M</div>
-        ${listing.metro.lines.map(l => `<span class="metro-line" style="background:${l.bg};color:${l.fg}">${l.num}</span>`).join('')}
-        <span class="metro-name">${listing.metro.name}</span>
-        <span class="metro-dist">· ${listing.metro.dist}</span>
+        <span class="metro-name">${esc(listing.metro)}</span>
       </div>` : ''}
       <div class="card-specs">
-        <div class="spec">
-          <span class="spec-val">${listing.rooms}</span>
-          <span class="spec-lbl">Pièces</span>
-        </div>
-        <div class="spec">
-          <span class="spec-val">${listing.surface}</span>
-          <span class="spec-lbl">m²</span>
-        </div>
-        <div class="spec">
-          <span class="spec-val">${Math.round(listing.price / listing.surface)}</span>
-          <span class="spec-lbl">€/m²</span>
-        </div>
+        <div class="spec"><span class="spec-val">${listing.rooms}</span><span class="spec-lbl">Pièces</span></div>
+        <div class="spec"><span class="spec-val">${listing.surface}</span><span class="spec-lbl">m²</span></div>
+        <div class="spec"><span class="spec-val">${listing.surface ? Math.round(listing.price / listing.surface) : '—'}</span><span class="spec-lbl">€/m²</span></div>
       </div>
       <div class="card-tags">
-        ${listing.tags.map(t => `<span class="tag ${t === 'Parking' ? 'highlight' : ''}">${t}</span>`).join('')}
+        ${listing.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}
         ${listing.hasParking ? '<span class="tag highlight">🚗 Parking</span>' : ''}
       </div>
       <div class="card-footer">
-        <span class="card-date">${listing.date}</span>
+        <span class="card-date">${esc(formatDate(listing.detected))}</span>
         <div class="card-actions">
-          <button class="btn-icon btn-fav ${isFav ? 'active' : ''}" onclick="toggleFav(${listing.id}, this)">
-            ${isFav ? '♥' : '♡'}
-          </button>
-          <button class="btn-icon btn-open" onclick="window.open('${listing.url}','_blank')">↗</button>
+          <button class="btn-icon btn-fav ${isFav ? 'active' : ''}" onclick="toggleFav('${esc(listing.id)}', this)">${isFav ? '♥' : '♡'}</button>
+          <button class="btn-icon btn-open" onclick="window.open('${esc(listing.url)}','_blank')">↗</button>
         </div>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function renderCards(filter = 'all') {
-  const container = document.getElementById('cards-container');
-  const filtered = filter === 'all'
-    ? MOCK_LISTINGS
-    : MOCK_LISTINGS.filter(l => l.source === filter);
-  container.innerHTML = filtered.map(createCard).join('');
+function visibleListings() {
+  return LISTINGS.filter(l => toggleState[l.source] !== false);
+}
 
+function renderFilters() {
+  const container = document.getElementById('filters');
+  const sources = activeSources();
+  if (!sources.some(s => s.id === activeFilter)) activeFilter = 'all';
+  container.innerHTML = [`<div class="filter-chip ${activeFilter === 'all' ? 'active' : ''}" onclick="filterCards('all', this)">Toutes</div>`]
+    .concat(sources.map(s => `<div class="filter-chip ${activeFilter === s.id ? 'active' : ''}" onclick="filterCards('${s.id}', this)">${esc(s.name)}</div>`))
+    .join('');
+}
+
+function renderCards(error) {
+  const container = document.getElementById('cards-container');
+  const visible = visibleListings();
+  const filtered = activeFilter === 'all' ? visible : visible.filter(l => l.source === activeFilter);
+  if (error && LISTINGS.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Données indisponibles</div><div class="empty-sub">${esc(error)}</div></div>`;
+  } else if (filtered.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🏠</div><div class="empty-title">Aucune annonce pour l'instant</div><div class="empty-sub">Le job de recherche remplit le Sheet toutes les 15 min.<br>Tire vers le bas ou appuie sur ↻ dans Config.</div></div>`;
+  } else {
+    container.innerHTML = filtered.map(createCard).join('');
+  }
   const newCount = filtered.filter(l => l.isNew).length;
-  document.getElementById('new-badge').textContent = newCount > 0 ? `${newCount} nouvelles` : 'À jour';
-  document.getElementById('total-count').textContent = MOCK_LISTINGS.length;
+  document.getElementById('new-badge').textContent = newCount > 0 ? `${newCount} nouvelle${newCount > 1 ? 's' : ''}` : 'À jour';
+  document.getElementById('total-count').textContent = visible.length;
+  const navBadge = document.getElementById('nav-badge');
+  navBadge.style.display = newCount > 0 ? '' : 'none';
+  navBadge.textContent = newCount;
 }
 
 function renderSources() {
   const container = document.getElementById('sources-list');
-  container.innerHTML = SOURCES.map(s => `
-    <div class="source-row">
-      <div class="source-info">
-        <div class="source-icon" style="background:${s.color}">${s.icon}</div>
-        <div class="source-detail">
-          <div class="source-title">${s.name}</div>
-          <div class="source-count">${s.count}</div>
+  const sources = activeSources();
+  if (sources.length === 0) {
+    container.innerHTML = `<div style="font-size:13px;color:var(--ink3);padding:8px 0">Aucune source encore — les sources apparaissent dès que le job a trouvé des annonces.</div>`;
+  } else {
+    container.innerHTML = sources.map(s => `
+      <div class="source-row">
+        <div class="source-info">
+          <div class="source-icon" style="background:${s.color}">${esc(s.icon)}</div>
+          <div class="source-detail">
+            <div class="source-title">${esc(s.name)}</div>
+            <div class="source-count">${s.count} annonce${s.count > 1 ? 's' : ''}</div>
+          </div>
         </div>
-      </div>
-      <button class="toggle ${toggleState[s.id] ? 'on' : ''}" onclick="toggleSource('${s.id}', this)"></button>
-    </div>
-  `).join('');
+        <button class="toggle ${toggleState[s.id] !== false ? 'on' : ''}" onclick="toggleSource('${s.id}', this)"></button>
+      </div>`).join('');
+  }
+  document.getElementById('header-sub').textContent = `Alertes temps réel · ${sources.length || '—'} source${sources.length > 1 ? 's' : ''} · toutes les 15 min`;
 }
 
 function renderFavs() {
   const container = document.getElementById('fav-container');
-  const favListings = MOCK_LISTINGS.filter(l => favorites.includes(l.id));
+  const favListings = LISTINGS.filter(l => favorites.includes(l.id));
   document.getElementById('fav-badge').textContent = favListings.length;
-  if (favListings.length === 0) {
-    container.innerHTML = `<div class="empty"><div class="empty-icon">🏠</div><div class="empty-title">Aucun favori</div><div class="empty-sub">Appuyez sur ♡ sur une annonce<br>pour la sauvegarder ici</div></div>`;
-  } else {
-    container.innerHTML = favListings.map(createCard).join('');
-  }
+  container.innerHTML = favListings.length === 0
+    ? `<div class="empty"><div class="empty-icon">🏠</div><div class="empty-title">Aucun favori</div><div class="empty-sub">Appuyez sur ♡ sur une annonce<br>pour la sauvegarder ici</div></div>`
+    : favListings.map(createCard).join('');
+}
+
+function renderStats() {
+  const newToday = LISTINGS.filter(l => l.isNew).length;
+  document.getElementById('stat-total').textContent = LISTINGS.length;
+  document.getElementById('stat-new').textContent = newToday;
+  const syncText = lastSync ? formatDate(lastSync).replace(/^Aujourd'hui, /, "aujourd'hui à ").replace(/^Hier, /, 'hier à ') : 'jamais';
+  document.getElementById('stat-sync').textContent = syncText;
+  document.getElementById('last-sync-text').textContent = `Dernière synchro : ${syncText}`;
+  document.getElementById('sheet-id-input').value = localStorage.getItem('sheet-id') || '';
+}
+
+function renderAll(error) {
+  renderFilters();
+  renderCards(error);
+  renderSources();
+  renderFavs();
+  renderStats();
 }
 
 // ─── INTERACTIONS ─────────────────────────────────────────────────────────────
@@ -1282,7 +1346,7 @@ function filterCards(filter, el) {
   activeFilter = filter;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
-  renderCards(filter);
+  renderCards();
 }
 
 function toggleFav(id, btn) {
@@ -1296,199 +1360,145 @@ function toggleFav(id, btn) {
     btn.textContent = '♥';
   }
   localStorage.setItem('immo-favs', JSON.stringify(favorites));
-  document.getElementById('fav-badge').textContent = favorites.length;
+  document.getElementById('fav-badge').textContent = LISTINGS.filter(l => favorites.includes(l.id)).length;
 }
 
 function toggleSource(id, btn) {
-  toggleState[id] = !toggleState[id];
-  btn.classList.toggle('on');
-}
-
-function simulateRefresh() {
-  const btn = document.getElementById('refresh-btn');
-  btn.innerHTML = '<span class="spinning">↻</span> Actualisation…';
-  btn.disabled = true;
-  setTimeout(() => {
-    btn.innerHTML = '<span>✓</span> À jour';
-    btn.style.background = 'var(--green)';
-    const now = new Date();
-    const t = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    document.getElementById('last-sync-text').textContent = `Dernière synchro : aujourd'hui à ${t}`;
-    document.getElementById('stat-sync').textContent = `aujourd'hui à ${t}`;
-    setTimeout(() => {
-      btn.innerHTML = '<span>↻</span> Actualiser maintenant';
-      btn.style.background = '';
-      btn.disabled = false;
-    }, 2000);
-  }, 2000);
+  toggleState[id] = toggleState[id] === false;
+  btn.classList.toggle('on', toggleState[id] !== false);
+  localStorage.setItem('immo-sources', JSON.stringify(toggleState));
+  renderFilters();
+  renderCards();
 }
 
 function saveSheetId() {
   const val = document.getElementById('sheet-id-input').value.trim();
-  if (val) {
-    localStorage.setItem('sheet-id', val);
-    alert('✅ ID sauvegardé. Reconnecte l\'app à Internet pour charger les vraies données.');
-  }
+  if (val) localStorage.setItem('sheet-id', val); else localStorage.removeItem('sheet-id');
+  refreshListings({ manual: true });
 }
 
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-
-renderCards();
-renderSources();
-document.getElementById('fav-badge').textContent = favorites.length;
-
-const savedId = localStorage.getItem('sheet-id');
-if (savedId) document.getElementById('sheet-id-input').value = savedId;
-
-// ─── FIREBASE / NOTIFICATIONS PUSH ────────────────────────────────────────────
-
-// ⚠️ REMPLACE CES VALEURS par ta config Firebase (voir firebase-setup.md)
-const firebaseConfig = {
-  apiKey: "AIzaSyBUJUwmAALNCtlqKmz1FTBUew9Rv_0rEWo",
-  authDomain: "paris-immo-26595.firebaseapp.com",
-  projectId: "paris-immo-26595",
-  storageBucket: "paris-immo-26595.firebasestorage.app",
-  messagingSenderId: "305267172723",
-  appId: "1:305267172723:web:8b457a1bb4a7850f5d1106"
-};
-const VAPID_KEY = "BIZlXjcxGfwahyf7yXDJZYdw2dOatsK5xpr-jW33t6vXFD3i7o8fqeZ7xRCFhwXOkCGhdEhzX8h8JXKKiDJa0cM";
-
-async function initNotifications() {
-  // Vérification support navigateur
-  if (!('serviceWorker' in navigator) || !('Notification' in window)) {
-    console.log('Notifications non supportées sur ce navigateur.');
-    return;
-  }
-
-  // Enregistrement du Service Worker inline (blob URL)
-  const swCode = `
-    importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
-    importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
-
-    firebase.initializeApp(${JSON.stringify(FIREBASE_CONFIG)});
-    const messaging = firebase.messaging();
-
-    // Gestion des notifs en arrière-plan
-    messaging.onBackgroundMessage(payload => {
-      const { title, body, icon } = payload.notification;
-      self.registration.showNotification(title, {
-        body,
-        icon: icon || '/icons/icon-192.png',
-        badge: '/icons/badge-72.png',
-        data: payload.data,
-        vibrate: [200, 100, 200],
-        tag: payload.data?.annonceId || 'paris-immo',
-        actions: [
-          { action: 'open', title: 'Voir l\'annonce' },
-          { action: 'dismiss', title: 'Ignorer' }
-        ]
-      });
-    });
-
-    // Clic sur la notification → ouvre l'annonce
-    self.addEventListener('notificationclick', event => {
-      event.notification.close();
-      if (event.action === 'open' || !event.action) {
-        const url = event.notification.data?.url || '/';
-        event.waitUntil(clients.openWindow(url));
-      }
-    });
-  `;
-
-  const swBlob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(swBlob);
-
-  try {
-    const registration = await navigator.serviceWorker.register(swUrl);
-    console.log('✅ Service Worker enregistré');
-
-    // Charger Firebase SDK dynamiquement
-    await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
-    await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
-
-    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-    const messaging = firebase.messaging();
-
-    // Demander permission notifications
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      console.log('Permission notifications refusée.');
-      updateNotifStatus('refusée');
-      return;
-    }
-
-    // Obtenir le token FCM
-    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
-    console.log('📬 FCM Token:', token);
-    localStorage.setItem('fcm-token', token);
-
-    // S'abonner au topic via ton Apps Script (ou directement Firebase)
-    updateNotifStatus('active');
-
-    // Notifs en premier plan
-    messaging.onMessage(payload => {
-      const { title, body } = payload.notification;
-      // Affiche une notif native même si l'app est ouverte
-      new Notification(title, {
-        body,
-        icon: '/icons/icon-192.png',
-        tag: payload.data?.annonceId
-      });
-      // Ajoute l'annonce en haut de la liste si données dispo
-      if (payload.data?.annonceId) {
-        showInAppAlert(payload.notification.title, payload.notification.body, payload.data.url);
-      }
-    });
-
-  } catch(e) {
-    console.error('Erreur Service Worker / Firebase:', e);
-  }
-}
+// ─── NOTIFICATIONS PUSH (Firebase Cloud Messaging) ───────────────────────────
+//
+// Chrome n'affiche la demande d'autorisation que sur un geste de l'utilisateur :
+// le bouton « Activer les notifications » appelle enableNotifications(true).
+// Au chargement, si l'autorisation est déjà accordée, on rafraîchit le token en silence.
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
     const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
+    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Chargement impossible : ' + src));
     document.head.appendChild(s);
   });
 }
 
-function updateNotifStatus(status) {
-  const pill = document.querySelector('.status-pill:first-child');
-  if (status === 'active') {
-    pill.innerHTML = '<div class="status-dot"></div><span>Notifs actives</span>';
-  } else if (status === 'refusée') {
-    pill.innerHTML = '<span style="opacity:0.5">🔕 Notifs off</span>';
+function setNotifStatus(state, detail) {
+  const pill = document.getElementById('notif-pill');
+  const card = document.getElementById('notif-status');
+  const banner = document.getElementById('notif-banner');
+  const labels = {
+    on:          ['<div class="status-dot"></div><span>Notifs actives</span>', '✅ Notifications actives sur cet appareil.'],
+    off:         ['<span style="opacity:0.6">🔕 Notifs off</span>', 'Les notifications ne sont pas encore activées sur cet appareil.'],
+    denied:      ['<span style="opacity:0.6">🔕 Notifs refusées</span>', '⛔ Autorisation refusée. Réautorise les notifications dans les paramètres du site (Chrome → ⋮ → Infos sur la page), puis réessaie.'],
+    unsupported: ['<span style="opacity:0.6">🔕 Non supporté</span>', 'Ce navigateur ne supporte pas les notifications push. Sur Android, installe l\'app depuis Chrome ; sur iPhone, ajoute-la à l\'écran d\'accueil depuis Safari.'],
+    error:       ['<span style="opacity:0.6">⚠️ Notifs</span>', '⚠️ Erreur : ' + (detail || 'inconnue')],
+  };
+  const [pillHtml, text] = labels[state] || labels.off;
+  if (pill) pill.innerHTML = pillHtml;
+  if (card) card.textContent = text;
+  if (banner) banner.style.display = state === 'on' ? 'none' : '';
+  const btn = document.getElementById('notif-btn');
+  if (btn) btn.style.display = state === 'on' ? 'none' : '';
+}
+
+function renderToken() {
+  const box = document.getElementById('token-box');
+  const actions = document.getElementById('token-actions');
+  if (!box) return;
+  if (fcmToken) {
+    box.textContent = fcmToken;
+    actions.style.display = 'flex';
+  } else {
+    box.textContent = 'Aucun token — active d\'abord les notifications.';
+    actions.style.display = 'none';
+  }
+}
+
+async function copyToken() {
+  if (!fcmToken) return;
+  try { await navigator.clipboard.writeText(fcmToken); showInAppAlert('Token copié', 'Colle-le dans FCM_TOKENS du fichier .env sur pr-small.'); }
+  catch (e) { prompt('Copie le token :', fcmToken); }
+}
+
+async function shareToken() {
+  if (!fcmToken) return;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Token FCM Paris Immo', text: fcmToken }); } catch (e) { /* annulé */ }
+  } else { copyToken(); }
+}
+
+async function enableNotifications(fromUser) {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) { setNotifStatus('unsupported'); return; }
+  try {
+    let permission = Notification.permission;
+    if (permission !== 'granted') {
+      if (!fromUser) { setNotifStatus(permission === 'denied' ? 'denied' : 'off'); return; }
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') { setNotifStatus('denied'); return; }
+
+    const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+    await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+    await loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
+
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
+    if (!token) throw new Error('Aucun token retourné par Firebase');
+    const changed = token !== fcmToken;
+    fcmToken = token;
+    localStorage.setItem('fcm-token', token);
+    setNotifStatus('on');
+    renderToken();
+    if (changed && fromUser) showInAppAlert('Notifications activées', 'Envoie maintenant le token au job (Config → Partager).');
+
+    // Notification reçue pendant que l'app est ouverte
+    messaging.onMessage(payload => {
+      const n = payload.notification || {};
+      showInAppAlert(n.title || 'Nouvelle annonce', n.body || '', payload.data?.url);
+      refreshListings();
+    });
+  } catch (e) {
+    console.error('Notifications :', e);
+    setNotifStatus('error', e.message);
   }
 }
 
 function showInAppAlert(title, body, url) {
   const alert = document.createElement('div');
-  alert.style.cssText = `
-    position:fixed;top:16px;left:16px;right:16px;
-    background:#1a1a1a;color:white;border-radius:14px;
-    padding:14px 16px;z-index:999;cursor:pointer;
-    box-shadow:0 8px 32px rgba(0,0,0,0.3);
-    animation:slideDown 0.3s ease;max-width:430px;margin:0 auto;
-  `;
+  alert.style.cssText = `position:fixed;top:16px;left:16px;right:16px;background:#1a1a1a;color:white;border-radius:14px;
+    padding:14px 16px;z-index:999;cursor:pointer;box-shadow:0 8px 32px rgba(0,0,0,0.3);animation:slideDown 0.3s ease;max-width:430px;margin:0 auto;`;
   alert.innerHTML = `
-    <div style="font-size:11px;color:#c8a96e;letter-spacing:1px;margin-bottom:4px">✦ NOUVELLE ANNONCE</div>
-    <div style="font-size:14px;font-weight:600;margin-bottom:2px">${title}</div>
-    <div style="font-size:12px;opacity:0.7">${body}</div>
-  `;
-  alert.onclick = () => { window.open(url, '_blank'); alert.remove(); };
+    <div style="font-size:11px;color:#c8a96e;letter-spacing:1px;margin-bottom:4px">✦ PARIS IMMO</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:2px">${esc(title)}</div>
+    <div style="font-size:12px;opacity:0.7">${esc(body)}</div>`;
+  alert.onclick = () => { if (url) window.open(url, '_blank'); alert.remove(); };
   document.body.appendChild(alert);
   setTimeout(() => alert.remove(), 6000);
 }
 
-// Lancement auto des notifications si config Firebase remplie
-if (FIREBASE_CONFIG.apiKey !== 'TON_API_KEY') {
-  initNotifications();
-} else {
-  console.log('ℹ️ Configure Firebase dans paris-immo.html pour activer les notifications push.');
-}
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+loadCache();
+renderAll();
+renderToken();
+refreshListings();
+enableNotifications(false);
+
+setInterval(() => { if (document.visibilityState === 'visible') refreshListings(); }, REFRESH_EVERY_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (!lastSync || Date.now() - lastSync.getTime() > 60_000)) refreshListings();
+});
 </script>
 </body>
 </html>

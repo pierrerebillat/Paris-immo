@@ -774,6 +774,11 @@
     line-height: 1.6;
   }
 
+  .card.highlight {
+    outline: 3px solid var(--accent);
+    box-shadow: 0 0 0 6px rgba(200,169,110,0.25), var(--shadow);
+    transition: box-shadow 0.4s ease, outline-color 0.4s ease;
+  }
   .notif-banner {
     display: flex; align-items: center; gap: 12px;
     background: var(--ink); color: white; border-radius: 14px;
@@ -1487,12 +1492,49 @@ function showInAppAlert(title, body, url) {
   setTimeout(() => alert.remove(), 6000);
 }
 
+// ─── OUVERTURE SUR UNE ANNONCE (clic sur une notification) ───────────────────
+//
+// Le job envoie les notifications avec un lien vers l'app : `?annonce=<id>`. Quand l'app
+// est fermée, le SDK Firebase l'ouvre sur cette URL ; quand elle est déjà ouverte, il la
+// met au premier plan et lui poste un message « notification-clicked » avec les données.
+
+async function focusAnnonce(id) {
+  if (!id) return;
+  if (!LISTINGS.some(l => l.id === id)) await refreshListings();
+  const navAnnonces = document.querySelector('.nav-item');
+  if (navAnnonces) switchSection('annonces', navAnnonces);
+  activeFilter = 'all';
+  const listing = LISTINGS.find(l => l.id === id);
+  if (listing) toggleState[listing.source] = true;
+  renderFilters();
+  renderCards();
+  const card = document.querySelector(`#cards-container .card[data-id="${CSS.escape(id)}"]`);
+  if (!card) { showInAppAlert('Annonce introuvable', "Elle n'est plus dans la liste (retirée ou filtrée)."); return; }
+  document.querySelectorAll('.card.highlight').forEach(c => c.classList.remove('highlight'));
+  card.classList.add('highlight');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => card.classList.remove('highlight'), 6000);
+}
+
+const annonceDemandee = new URLSearchParams(location.search).get('annonce');
+if (annonceDemandee) history.replaceState(null, '', location.pathname);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.isFirebaseMessaging && d.messageType === 'notification-clicked') {
+      const id = d.data?.annonceId || (d.fcmOptions?.link && new URL(d.fcmOptions.link, location.href).searchParams.get('annonce'));
+      if (id && !String(id).startsWith('test')) focusAnnonce(id);
+    }
+  });
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 loadCache();
 renderAll();
 renderToken();
-refreshListings();
+refreshListings().then(() => { if (annonceDemandee) focusAnnonce(annonceDemandee); });
 enableNotifications(false);
 
 setInterval(() => { if (document.visibilityState === 'visible') refreshListings(); }, REFRESH_EVERY_MS);

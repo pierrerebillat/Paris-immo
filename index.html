@@ -466,6 +466,17 @@
   }
   .ecartee-banner .restore:active { opacity: 0.7; }
   .section-note { font-size: 12px; color: var(--ink3); line-height: 1.5; margin: -8px 0 14px; }
+
+  /* ANNONCE DÉJÀ LOUÉE (disparue des sites) : grisée, gardée seulement dans les favoris */
+  .card.loue { opacity: 0.72; }
+  .card.loue .card-photo img { filter: grayscale(1); opacity: 0.7; }
+  .card.loue .card-photo-price { background: rgba(60,60,60,0.75); }
+  .loue-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 16px; background: var(--surface2); color: var(--ink2);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.3px; border-bottom: 1px solid var(--border);
+  }
+  .loue-banner span:last-child { font-weight: 400; color: var(--ink3); }
   .cfg-input {
     flex: 1; min-width: 0; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px;
     font-family: 'DM Sans', sans-serif; color: var(--ink); background: var(--bg);
@@ -1244,6 +1255,7 @@ function rowToListing(row) {
   const meuble = String(pick('meuble') || 'Non').toLowerCase() === 'oui';
   const parking = String(pick('parking') || 'Non').toLowerCase() === 'oui';
   const codePostal = String(pick('codepostal') || '');
+  const indisponible = parseGvizDate(pick('indisponibledepuis'));  // renseigné par le job quand l'annonce a disparu du site
   const tags = [meuble ? 'Meublé' : 'Vide'];
   if (arr) tags.push(arr === 1 ? '1er arr.' : `${arr}e arr.`);
   else if (codePostal) tags.push(codePostal);
@@ -1262,6 +1274,7 @@ function rowToListing(row) {
     url: pick('urlannonce', 'url') || '#',
     logement: String(pick('logement') || '') || null,
     codePostal,
+    indisponible,
   };
 }
 
@@ -1276,12 +1289,17 @@ function grouper(listings) {
   const out = [];
   for (const [cle, membres] of groupes) {
     membres.sort((a, b) => (a.detected?.getTime() || 0) - (b.detected?.getTime() || 0));
-    const principal = membres.find(m => m.id === cle) || membres[0];
+    const enLigne = membres.filter(m => !m.indisponible);
+    const tete = membres.find(m => m.id === cle) || membres[0];
+    // Le logement est « déjà loué » quand plus aucune de ses annonces n'est en ligne
+    const principal = (enLigne.length && tete.indisponible) ? enLigne[0] : tete;
     principal.logementId = cle;  // clé du groupe = colonne Logement du Sheet (ou l'ID quand seule)
-    principal.autres = membres.filter(m => m !== principal).map(m => ({
+    principal.loue = enLigne.length === 0;
+    principal.loueDepuis = principal.loue ? new Date(Math.max(...membres.map(m => m.indisponible?.getTime() || 0))) : null;
+    principal.autres = (principal.loue ? membres : enLigne).filter(m => m !== principal).map(m => ({
       id: m.id, source: m.source, sourceName: m.sourceName, url: m.url, price: m.price, detected: m.detected,
     }));
-    const prix = membres.map(m => m.price).filter(p => p > 0);
+    const prix = (principal.loue ? membres : enLigne).map(m => m.price).filter(p => p > 0);
     principal.prixMin = prix.length ? Math.min(...prix) : principal.price;
     out.push(principal);
   }
@@ -1325,7 +1343,8 @@ function loadCache() {
   try {
     const cached = JSON.parse(localStorage.getItem('immo-cache') || 'null');
     if (cached && Array.isArray(cached.listings)) {
-      RAW_LISTINGS = cached.listings.map(l => ({ ...l, autres: undefined, detected: l.detected ? new Date(l.detected) : null }));
+      RAW_LISTINGS = cached.listings.map(l => ({ ...l, autres: undefined, detected: l.detected ? new Date(l.detected) : null,
+                                                indisponible: l.indisponible ? new Date(l.indisponible) : null }));
       RAW_LISTINGS.forEach(l => { l.isNew = l.detected ? (Date.now() - l.detected.getTime()) < NEW_WINDOW_MS : false; });
       LISTINGS = grouper(RAW_LISTINGS);
       lastSync = cached.lastSync ? new Date(cached.lastSync) : null;
@@ -1338,7 +1357,7 @@ function loadCache() {
 function saveCache() {
   try {
     localStorage.setItem('immo-cache', JSON.stringify({
-      listings: RAW_LISTINGS.map(({ autres, prixMin, logementId, ...l }) => l), lastSync,
+      listings: RAW_LISTINGS.map(({ autres, prixMin, logementId, loue, loueDepuis, ...l }) => l), lastSync,
       ecartees: [...ECARTEES.entries()], favoris: [...FAVORIS.entries()],
     }));
   } catch (e) { /* quota */ }
@@ -1415,12 +1434,18 @@ function createCard(listing, { ecartee = false } = {}) {
   const favs = favsDe(logement);
   const isFav = favs.some(f => f.moi);
   const info = ecartee ? ecartInfo(logement) : null;
+  const loue = !!listing.loue;
   return `
-    <div class="card ${ecartee ? 'ecartee' : ''}" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}" data-logement="${esc(logement)}">
+    <div class="card ${ecartee ? 'ecartee' : ''} ${loue ? 'loue' : ''}" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}" data-logement="${esc(logement)}">
       ${ecartee ? `
       <div class="ecartee-banner">
         <span>🗑 Écartée ${esc(info.quand)} · ${esc(info.restant)}</span>
         <button class="restore" onclick="restaurer('${esc(logement)}')">↩ Restaurer</button>
+      </div>` : ''}
+      ${loue && !ecartee ? `
+      <div class="loue-banner">
+        <span>🔒 Déjà loué</span>
+        <span>annonce retirée ${esc(listing.loueDepuis ? 'le ' + listing.loueDepuis.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'du site')}</span>
       </div>` : ''}
       <div class="card-photo">
         ${listing.photo
@@ -1462,8 +1487,8 @@ function createCard(listing, { ecartee = false } = {}) {
       <div class="card-footer">
         <span class="card-date">${esc(formatDate(listing.detected))}</span>
         <div class="card-actions">
-          ${ecartee ? '' : `<button class="btn-icon btn-fav ${isFav ? 'active' : favs.length ? 'autre' : ''}" title="${esc(favs.length ? '♥ ' + favs.map(f => f.qui || 'moi').join(' · ') : 'Ajouter aux favoris')}" onclick="toggleFav('${esc(logement)}')">${favs.length ? '♥' : '♡'}</button>
-          <button class="btn-icon btn-del" title="Écarter cette annonce" onclick="ecarter('${esc(logement)}')">🗑</button>`}
+          ${ecartee ? '' : `<button class="btn-icon btn-fav ${isFav ? 'active' : favs.length ? 'autre' : ''}" title="${esc(favs.length ? '♥ ' + favs.map(f => f.qui || 'moi').join(' · ') : 'Ajouter aux favoris')}" onclick="toggleFav('${esc(logement)}')">${favs.length ? '♥' : '♡'}</button>`}
+          ${ecartee || loue ? '' : `<button class="btn-icon btn-del" title="Écarter cette annonce" onclick="ecarter('${esc(logement)}')">🗑</button>`}
           <button class="btn-icon btn-open" onclick="window.open('${esc(listing.url)}','_blank')">↗</button>
         </div>
       </div>
@@ -1528,7 +1553,7 @@ function isEcartee(l) {
 }
 
 function visibleListings() {
-  return LISTINGS.filter(l => !isEcartee(l) && sourcesDe(l).some(src => toggleState[src] !== false));
+  return LISTINGS.filter(l => !l.loue && !isEcartee(l) && sourcesDe(l).some(src => toggleState[src] !== false));
 }
 
 function ecarteesListings() {
@@ -1631,7 +1656,9 @@ function favsDe(logement) {
 }
 
 function favListings() {
+  // Les logements déjà loués restent dans les favoris (grisés), après ceux encore en ligne
   return LISTINGS.filter(l => !isEcartee(l) && favsDe(l.logementId || l.id).length).sort((a, b) => {
+    if (!!a.loue !== !!b.loue) return a.loue ? 1 : -1;
     const d = l => Math.max(...favsDe(l.logementId || l.id).map(f => f.date?.getTime() || 0), 0);
     return d(b) - d(a);
   });
@@ -1737,10 +1764,12 @@ function renderFavs() {
   const container = document.getElementById('fav-container');
   const liste = favListings();
   document.getElementById('fav-badge').textContent = liste.length;
+  const nLoues = liste.filter(l => l.loue).length;
   const note = document.getElementById('fav-note');
-  if (note) note.textContent = getQui()
+  if (note) note.textContent = (getQui()
     ? `Les cœurs des deux téléphones, réunis ici — les tiens sont signés « ${getQui()} ».`
-    : 'Tes cœurs restent sur ce téléphone. Indique ton prénom dans Config → Partage pour les partager.';
+    : 'Tes cœurs restent sur ce téléphone. Indique ton prénom dans Config → Partage pour les partager.')
+    + (nLoues ? ` ${nLoues} ${nLoues > 1 ? 'sont déjà loués (grisés, en bas)' : 'est déjà loué (grisé, en bas)'}.` : '');
   container.innerHTML = liste.length === 0
     ? `<div class="empty"><div class="empty-icon">🏠</div><div class="empty-title">Aucun favori</div><div class="empty-sub">Appuyez sur ♡ sur une annonce<br>pour la sauvegarder ici</div></div>`
     : liste.map(l => createCard(l)).join('');
@@ -1757,7 +1786,7 @@ function renderEcartees() {
 }
 
 function renderStats() {
-  const actives = LISTINGS.filter(l => !isEcartee(l));
+  const actives = LISTINGS.filter(l => !l.loue && !isEcartee(l));
   const newToday = actives.filter(l => l.isNew).length;
   document.getElementById('stat-total').textContent = actives.length;
   document.getElementById('stat-total-lbl').textContent = RAW_LISTINGS.length > LISTINGS.length
@@ -2017,8 +2046,16 @@ function showInAppAlert(title, body, url) {
 async function focusAnnonce(id) {
   if (!id) return;
   if (!LISTINGS.some(l => l.id === id)) await refreshListings();
-  const listing = LISTINGS.find(l => l.id === id);
+  let listing = LISTINGS.find(l => l.id === id) || LISTINGS.find(l => (l.autres || []).some(a => a.id === id));
+  if (listing) id = listing.id;
   const ecartee = listing && isEcartee(listing);
+  if (listing && listing.loue && !ecartee) {
+    if (!favsDe(listing.logementId || listing.id).length) { showInAppAlert('Déjà loué', "Cette annonce a été retirée du site depuis."); return; }
+    switchSection('favoris');
+    const card = document.querySelector(`#fav-container .card[data-id="${CSS.escape(id)}"]`);
+    if (card) { card.classList.add('highlight'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => card.classList.remove('highlight'), 6000); }
+    return;
+  }
   switchSection(ecartee ? 'ecartees' : 'annonces');
   activeFilter = 'all';
   if (listing) toggleState[listing.source] = true;

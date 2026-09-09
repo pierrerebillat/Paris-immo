@@ -1090,7 +1090,7 @@
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
       <input id="script-url-input" type="url" placeholder="URL du script (https://script.google.com/macros/s/…/exec)" class="cfg-input" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <input id="script-key-input" type="password" placeholder="Clé (facultative)" class="cfg-input" autocomplete="off">
+      <input id="script-key-input" type="text" placeholder="Clé (exactement celle de CLE dans le script)" class="cfg-input" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
       <div style="display:flex;gap:8px">
         <input id="qui-input" type="text" placeholder="Ton prénom (pour les favoris)" class="cfg-input" autocomplete="given-name" maxlength="40">
         <button onclick="saveScriptConfig()" class="cfg-btn">OK</button>
@@ -1185,6 +1185,7 @@ let FAVORIS = new Map();   // logement → [{ qui, date }] d'après l'onglet Fav
 // Demandes pas encore confirmées par le script (hors-ligne, script absent…) : logement → { action, date, … }
 let pendingEcarts = JSON.parse(localStorage.getItem('immo-ecartees-pending') || '{}');
 let pendingFavs = JSON.parse(localStorage.getItem('immo-favoris-pending') || '{}');
+let scriptErreur = '';  // « clé incorrecte » : on cesse d'envoyer (et on garde tout en attente) jusqu'à la prochaine saisie dans Config
 
 function getSheetId() { return localStorage.getItem('sheet-id') || DEFAULT_SHEET_ID; }
 function getScriptUrl() { return localStorage.getItem('script-url') || DEFAULT_SCRIPT_URL; }
@@ -1497,8 +1498,12 @@ const FILE_FAVS = {
     const sans = liste.filter(f => !memeQui(f.qui, p.qui));
     if (p.action === 'favori') sans.push({ qui: p.qui, date: rep.date ? new Date(rep.date) : new Date(p.date) });
     if (sans.length) FAVORIS.set(logement, sans); else FAVORIS.delete(logement);
+    // Le Sheet a confirmé : la copie locale de secours (favoris d'avant le prénom) n'est plus utile
+    if (favorites.includes(logement)) { favorites = favorites.filter(f => f !== logement); saveFavoritesLocaux(); }
   },
 };
+
+function saveFavoritesLocaux() { localStorage.setItem('immo-favs', JSON.stringify(favorites)); }
 
 function ecartInfo(logement) {
   const p = pendingEcarts[logement];
@@ -1541,13 +1546,19 @@ async function envoyerAuScript(payload) {
   const text = await res.text();
   let json;
   try { json = JSON.parse(text); } catch (e) { throw new Error('réponse inattendue du script (URL /exec ? accès « Tout le monde » ?)'); }
-  if (!json.ok) { const err = new Error(json.erreur || 'refusé par le script'); err.definitif = true; throw err; }
+  if (!json.ok) {
+    const err = new Error(json.erreur || 'refusé par le script');
+    if (/cl[ée] incorrecte/i.test(err.message)) err.config = true;  // la clé saisie dans Config ne correspond pas : tout reste en attente
+    else err.definitif = true;                                       // erreur propre à cette demande (ex. déjà purgée par le job)
+    throw err;
+  }
   return json;
 }
 
 // Renvoie les demandes restées en attente (hors-ligne, script configuré après coup…)
 async function flushPending() {
-  if (!getScriptUrl()) return;
+  if (!getScriptUrl() || scriptErreur) return;
+  migrerFavorisLocaux(getQui());  // idempotent : remet en file les cœurs locaux pas encore confirmés par le Sheet
   for (const logement of Object.keys(pendingEcarts)) await pousser(FILE_ECARTS, logement);
   for (const logement of Object.keys(pendingFavs)) await pousser(FILE_FAVS, logement);
 }
@@ -1575,7 +1586,7 @@ async function restaurer(logement) {
 }
 
 async function pousser(file, logement) {
-  if (!getScriptUrl()) { renderScriptStatus(); return; }
+  if (!getScriptUrl() || scriptErreur) { renderScriptStatus(); return; }
   file.enCours = file.enCours || new Set();
   const p = file.items[logement];
   if (!p || file.enCours.has(logement)) return;  // la réponse en vol enchaînera sur la demande la plus récente
@@ -1587,6 +1598,7 @@ async function pousser(file, logement) {
     if (file.items[logement] === p) delete file.items[logement];
     savePending(); saveCache(); renderAll();
   } catch (e) {
+    if (e.config) { scriptErreur = e.message; renderScriptStatus(); return; }  // on garde la demande : rien n'est perdu
     if (e.definitif) { if (file.items[logement] === p) delete file.items[logement]; savePending(); renderAll(); showToast(`Script : ${e.message}`); }
     else { console.warn('Envoi au script impossible, réessai plus tard :', e.message); renderScriptStatus(); return; }
   } finally {
@@ -1610,7 +1622,10 @@ function favsDe(logement) {
     if (p.action === 'favori' && i < 0) liste.push({ qui, date: new Date(p.date), moi: true, locale: true });
     if (p.action === 'retirer' && i >= 0) liste.splice(i, 1);
   }
-  if (!qui && favorites.includes(logement)) liste.push({ qui: '', date: null, moi: true, locale: true });
+  // Cœur local (mis avant le prénom, ou non encore confirmé par le Sheet) : toujours affiché comme le mien
+  if (favorites.includes(logement) && !liste.some(f => f.moi) && !(p && p.action === 'retirer')) {
+    liste.push({ qui, date: null, moi: true, locale: true });
+  }
   liste.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
   return liste;
 }
@@ -1626,9 +1641,12 @@ async function toggleFav(logement) {
   const qui = getQui();
   const l = LISTINGS.find(x => (x.logementId || x.id) === logement);
   const mien = favsDe(logement).some(f => f.moi);
-  if (!qui) {  // favoris locaux (pas de prénom saisi)
+  const confirme = !!qui && (FAVORIS.get(logement) || []).some(f => memeQui(f.qui, qui));
+  if (!qui || (mien && !confirme && !FILE_FAVS.enCours?.has(logement))) {
+    // Favori purement local (pas de prénom, ou jamais confirmé par le Sheet) : on l'ajoute / le retire ici, rien à envoyer
     favorites = mien ? favorites.filter(f => f !== logement) : favorites.concat(logement);
-    localStorage.setItem('immo-favs', JSON.stringify(favorites));
+    saveFavoritesLocaux();
+    if (mien) { delete pendingFavs[logement]; savePending(); }
     renderAll();
     return;
   }
@@ -1638,16 +1656,21 @@ async function toggleFav(logement) {
   await pousser(FILE_FAVS, logement);
 }
 
-// Premier prénom saisi : les cœurs locaux de ce téléphone deviennent des favoris partagés
+// Cœurs locaux → favoris partagés sous le prénom. La liste locale n'est vidée qu'au fur et à mesure des
+// confirmations du Sheet (FILE_FAVS.appliquer) : une clé fausse ou une panne ne perd rien. Idempotent.
 function migrerFavorisLocaux(qui) {
   if (!qui || !favorites.length) return 0;
-  let n = 0;
+  let n = 0, restants = [];
   for (const logement of favorites) {
-    if (!pendingFavs[logement]) { pendingFavs[logement] = { action: 'favori', qui, date: new Date().toISOString(), titre: LISTINGS.find(x => (x.logementId || x.id) === logement)?.title || '' }; n++; }
+    if ((FAVORIS.get(logement) || []).some(f => memeQui(f.qui, qui))) continue;  // déjà dans le Sheet : copie locale inutile
+    restants.push(logement);
+    if (!pendingFavs[logement]) {
+      pendingFavs[logement] = { action: 'favori', qui, date: new Date().toISOString(), titre: LISTINGS.find(x => (x.logementId || x.id) === logement)?.title || '' };
+      n++;
+    }
   }
-  favorites = [];
-  localStorage.setItem('immo-favs', '[]');
-  savePending();
+  if (restants.length !== favorites.length) { favorites = restants; saveFavoritesLocaux(); }
+  if (n) savePending();
   return n;
 }
 
@@ -1758,6 +1781,11 @@ function renderScriptStatus(texte) {
   if (!el) return;
   const enAttente = Object.keys(pendingEcarts).length + Object.keys(pendingFavs).length;
   if (texte) { el.textContent = texte; return; }
+  if (scriptErreur) {
+    el.textContent = `⚠️ Le script répond « ${scriptErreur} » — la clé ci-dessus doit être exactement celle de CLE dans le script. `
+      + `Corrige-la puis OK. ${enAttente ? `${enAttente} demande${enAttente > 1 ? 's' : ''} (cœurs, suppressions) en attente : rien n'est perdu.` : ''}`;
+    return;
+  }
   if (!getScriptUrl()) {
     el.textContent = enAttente
       ? `⚠️ Script non configuré — ${enAttente} demande${enAttente > 1 ? 's' : ''} (suppression ou cœur) connue${enAttente > 1 ? 's' : ''} de ce téléphone seulement (le job et l'autre téléphone ne les voient pas).`
@@ -1772,7 +1800,7 @@ function renderScriptStatus(texte) {
 
 async function saveScriptConfig() {
   const url = document.getElementById('script-url-input').value.trim();
-  const key = document.getElementById('script-key-input').value;
+  const key = document.getElementById('script-key-input').value.trim();
   const qui = document.getElementById('qui-input').value.trim();
   if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) {
     showToast("L'URL doit être celle du déploiement : https://script.google.com/macros/s/…/exec");
@@ -1782,6 +1810,7 @@ async function saveScriptConfig() {
   if (key) localStorage.setItem('script-key', key); else localStorage.removeItem('script-key');
   const ancienQui = getQui();
   if (qui) localStorage.setItem('immo-qui', qui); else localStorage.removeItem('immo-qui');
+  scriptErreur = '';  // nouvelle saisie : on retente
   if (qui && !ancienQui) {
     const n = migrerFavorisLocaux(qui);
     if (n) showToast(`${n} favori${n > 1 ? 's' : ''} de ce téléphone ${n > 1 ? 'deviennent' : 'devient'} partagé${n > 1 ? 's' : ''} sous « ${qui} »`);
@@ -1793,6 +1822,9 @@ async function saveScriptConfig() {
     const res = await fetch(url, { cache: 'no-store' });
     const json = JSON.parse(await res.text());
     if (json.service !== 'paris-immo-ecartees') throw new Error('ce script ne répond pas comme attendu');
+    // Vérifie la clé avant d'envoyer quoi que ce soit (« ping » ; une ancienne version du script répond « action inconnue » : on passe)
+    try { await envoyerAuScript({ action: 'ping' }); }
+    catch (e) { if (e.config) { scriptErreur = e.message; renderScriptStatus(); return; } }
     showToast(`Script joignable · ${json.ecartees} écartée${json.ecartees > 1 ? 's' : ''} · ${json.favoris ?? 0} favori${json.favoris > 1 ? 's' : ''}`);
     await refreshListings({ manual: true });
   } catch (e) {

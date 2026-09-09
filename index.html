@@ -436,6 +436,12 @@
     color: var(--ink3);
   }
   .btn-fav.active { background: rgba(200,169,110,0.2); color: var(--accent2); }
+  .btn-fav.autre { color: var(--accent); }   /* cœur de l'autre téléphone seulement */
+  .card-favs {
+    display: flex; align-items: center; gap: 6px; padding: 0 16px 12px;
+    font-size: 11px; color: var(--accent2); font-weight: 500;
+  }
+  .card-favs .qui { padding: 3px 9px; border-radius: 999px; background: rgba(200,169,110,0.15); }
   .btn-open {
     background: var(--ink);
     color: white;
@@ -903,6 +909,7 @@
     <div class="section-title">Favoris</div>
     <span class="badge" id="fav-badge">0</span>
   </div>
+  <div class="section-note" id="fav-note">Les cœurs des deux téléphones, réunis ici.</div>
   <div id="fav-container">
     <div class="empty">
       <div class="empty-icon">🏠</div>
@@ -1075,19 +1082,21 @@
   </div>
 
   <div class="criteria-card">
-    <div class="criteria-title">🗑️ Annonces écartées</div>
+    <div class="criteria-title">🔗 Partage entre téléphones</div>
     <div style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:10px">
-      « Supprimer » est partagé entre les téléphones et vu par le job grâce à un petit script Google attaché au Sheet
-      (onglet « Écartées », voir <code>gas/ecartees.gs</code>). Colle ici l'URL de déploiement (…/exec) et la clé choisie dans le script.
+      Les annonces écartées (🗑) et les favoris (♥) sont partagés entre les téléphones grâce à un petit script Google
+      attaché au Sheet (onglets « Écartées » et « Favoris », voir <code>gas/ecartees.gs</code>). Colle ici l'URL de
+      déploiement (…/exec) et la clé choisie dans le script, et indique ton prénom : c'est lui qui signe tes cœurs.
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
       <input id="script-url-input" type="url" placeholder="URL du script (https://script.google.com/macros/s/…/exec)" class="cfg-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input id="script-key-input" type="password" placeholder="Clé (facultative)" class="cfg-input" autocomplete="off">
       <div style="display:flex;gap:8px">
-        <input id="script-key-input" type="password" placeholder="Clé (facultative)" class="cfg-input" autocomplete="off">
+        <input id="qui-input" type="text" placeholder="Ton prénom (pour les favoris)" class="cfg-input" autocomplete="given-name" maxlength="40">
         <button onclick="saveScriptConfig()" class="cfg-btn">OK</button>
       </div>
     </div>
-    <div class="cfg-status" id="script-status">Script non configuré — les suppressions restent sur ce téléphone.</div>
+    <div class="cfg-status" id="script-status">Script non configuré — les suppressions et les favoris restent sur ce téléphone.</div>
   </div>
 
   <div class="criteria-card" style="margin-bottom:40px">
@@ -1135,6 +1144,7 @@
 const DEFAULT_SHEET_ID = '1gQuCClnnOJ1b1t_VwtgiQ2qchCq-QALxrmtsX5PI6Ts';
 const SHEET_TAB = 'Annonces';
 const ECARTEES_TAB = 'Écartées';            // rempli par gas/ecartees.gs, purgé par le job après ECARTEES_JOURS
+const FAVORIS_TAB = 'Favoris';              // rempli par gas/ecartees.gs : une ligne par (logement, prénom)
 const ECARTEES_JOURS = 7;
 // URL de déploiement du script Apps Script (…/exec). Laisser vide et la saisir dans Config,
 // ou la renseigner ici pour qu'elle soit prête sur tous les téléphones (la clé reste à saisir).
@@ -1171,12 +1181,15 @@ let toggleState = JSON.parse(localStorage.getItem('immo-sources') || '{}');
 let lastSync = null;
 let fcmToken = localStorage.getItem('fcm-token') || '';
 let ECARTEES = new Map();  // logement → { date, purgee } d'après l'onglet Écartées du Sheet
-// Demandes pas encore confirmées par le script (hors-ligne, script absent…) : logement → { action, date, ids, titre }
+let FAVORIS = new Map();   // logement → [{ qui, date }] d'après l'onglet Favoris du Sheet
+// Demandes pas encore confirmées par le script (hors-ligne, script absent…) : logement → { action, date, … }
 let pendingEcarts = JSON.parse(localStorage.getItem('immo-ecartees-pending') || '{}');
+let pendingFavs = JSON.parse(localStorage.getItem('immo-favoris-pending') || '{}');
 
 function getSheetId() { return localStorage.getItem('sheet-id') || DEFAULT_SHEET_ID; }
 function getScriptUrl() { return localStorage.getItem('script-url') || DEFAULT_SCRIPT_URL; }
 function getScriptKey() { return localStorage.getItem('script-key') || ''; }
+function getQui() { return (localStorage.getItem('immo-qui') || '').trim(); }  // prénom qui signe les cœurs ('' = favoris locaux)
 
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const IS_STANDALONE = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
@@ -1293,6 +1306,20 @@ function rowsToEcartees(rows) {
 
 function nbLogementsEcartes() { return [...ECARTEES.entries()].filter(([k, v]) => (v.logement || k) === k).length; }
 
+// Onglet « Favoris » → Map logement → [{ qui, date }]
+function rowsToFavoris(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const logement = String(row.logement || '').trim(), qui = String(row.qui || '').trim();
+    if (!logement || !qui) continue;
+    if (!map.has(logement)) map.set(logement, []);
+    if (!map.get(logement).some(f => memeQui(f.qui, qui))) map.get(logement).push({ qui, date: parseGvizDate(row.date) });
+  }
+  return map;
+}
+
+function memeQui(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
+
 function loadCache() {
   try {
     const cached = JSON.parse(localStorage.getItem('immo-cache') || 'null');
@@ -1302,6 +1329,7 @@ function loadCache() {
       LISTINGS = grouper(RAW_LISTINGS);
       lastSync = cached.lastSync ? new Date(cached.lastSync) : null;
       ECARTEES = new Map((cached.ecartees || []).map(([k, v]) => [k, { logement: v.logement || k, date: v.date ? new Date(v.date) : null, purgee: !!v.purgee }]));
+      FAVORIS = new Map((cached.favoris || []).map(([k, v]) => [k, (v || []).map(f => ({ qui: f.qui, date: f.date ? new Date(f.date) : null }))]));
     }
   } catch (e) { /* cache illisible → on repart de zéro */ }
 }
@@ -1309,7 +1337,8 @@ function loadCache() {
 function saveCache() {
   try {
     localStorage.setItem('immo-cache', JSON.stringify({
-      listings: RAW_LISTINGS.map(({ autres, prixMin, logementId, ...l }) => l), lastSync, ecartees: [...ECARTEES.entries()],
+      listings: RAW_LISTINGS.map(({ autres, prixMin, logementId, ...l }) => l), lastSync,
+      ecartees: [...ECARTEES.entries()], favoris: [...FAVORIS.entries()],
     }));
   } catch (e) { /* quota */ }
 }
@@ -1318,12 +1347,10 @@ async function refreshListings({ manual = false } = {}) {
   const btn = document.getElementById('refresh-btn');
   if (manual && btn) { btn.innerHTML = '<span class="spinning">↻</span> Actualisation…'; btn.disabled = true; }
   try {
-    await flushPendingEcarts();
-    const [rows, rowsEcartees] = await Promise.all([
-      fetchSheetRows(getSheetId()),
-      // L'onglet n'existe qu'après le premier « Supprimer » : son absence n'est pas une erreur
-      fetchSheetRows(getSheetId(), ECARTEES_TAB).catch(e => { console.warn('Onglet Écartées illisible :', e.message); return null; }),
-    ]);
+    await flushPending();
+    // Les onglets Écartées / Favoris n'existent qu'après le premier usage : leur absence n'est pas une erreur
+    const tolerant = tab => fetchSheetRows(getSheetId(), tab).catch(e => { console.warn(`Onglet ${tab} illisible :`, e.message); return null; });
+    const [rows, rowsEcartees, rowsFavoris] = await Promise.all([fetchSheetRows(getSheetId()), tolerant(ECARTEES_TAB), tolerant(FAVORIS_TAB)]);
     const listings = rows.map(rowToListing).filter(Boolean);
     listings.sort((a, b) => (b.detected?.getTime() || 0) - (a.detected?.getTime() || 0));
     RAW_LISTINGS = listings;
@@ -1334,8 +1361,15 @@ async function refreshListings({ manual = false } = {}) {
       for (const [logement, p] of Object.entries(pendingEcarts)) {
         if ((p.action === 'ecarter' && ECARTEES.has(logement)) || (p.action === 'restaurer' && !ECARTEES.has(logement))) delete pendingEcarts[logement];
       }
-      savePending();
     }
+    if (rowsFavoris) {
+      FAVORIS = rowsToFavoris(rowsFavoris);
+      for (const [logement, p] of Object.entries(pendingFavs)) {
+        const present = (FAVORIS.get(logement) || []).some(f => memeQui(f.qui, p.qui));
+        if ((p.action === 'favori' && present) || (p.action === 'retirer' && !present)) delete pendingFavs[logement];
+      }
+    }
+    savePending();
     lastSync = new Date();
     saveCache();
     renderAll();
@@ -1375,9 +1409,10 @@ function formatDate(d) {
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function createCard(listing, { ecartee = false } = {}) {
-  const isFav = favorites.includes(listing.id);
   const style = sourceStyle(listing.source);
   const logement = listing.logementId || listing.id;
+  const favs = favsDe(logement);
+  const isFav = favs.some(f => f.moi);
   const info = ecartee ? ecartInfo(logement) : null;
   return `
     <div class="card ${ecartee ? 'ecartee' : ''}" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}" data-logement="${esc(logement)}">
@@ -1422,10 +1457,11 @@ function createCard(listing, { ecartee = false } = {}) {
         ${listing.autres.map(a => `<a class="autre-src" href="${esc(a.url)}" target="_blank" rel="noopener">
           <span class="dot" style="background:${sourceStyle(a.source).color}"></span>${esc(sourceStyle(a.source).name)}${a.price && a.price !== listing.price ? ` · ${a.price.toLocaleString('fr-FR')} €` : ''}</a>`).join('')}
       </div>` : ''}
+      ${favs.length ? `<div class="card-favs">♥ ${favs.map(f => `<span class="qui">${esc(f.qui || 'moi')}</span>`).join('')}</div>` : ''}
       <div class="card-footer">
         <span class="card-date">${esc(formatDate(listing.detected))}</span>
         <div class="card-actions">
-          ${ecartee ? '' : `<button class="btn-icon btn-fav ${isFav ? 'active' : ''}" onclick="toggleFav('${esc(listing.id)}', this)">${isFav ? '♥' : '♡'}</button>
+          ${ecartee ? '' : `<button class="btn-icon btn-fav ${isFav ? 'active' : favs.length ? 'autre' : ''}" title="${esc(favs.length ? '♥ ' + favs.map(f => f.qui || 'moi').join(' · ') : 'Ajouter aux favoris')}" onclick="toggleFav('${esc(logement)}')">${favs.length ? '♥' : '♡'}</button>
           <button class="btn-icon btn-del" title="Écarter cette annonce" onclick="ecarter('${esc(logement)}')">🗑</button>`}
           <button class="btn-icon btn-open" onclick="window.open('${esc(listing.url)}','_blank')">↗</button>
         </div>
@@ -1441,7 +1477,28 @@ function sourcesDe(l) { return [l.source].concat((l.autres || []).map(a => a.sou
 // (pendingEcarts). Le job purge les lignes du Sheet après ECARTEES_JOURS : l'annonce disparaît
 // alors d'elle-même de l'app, mais reste bloquée côté job.
 
-function savePending() { localStorage.setItem('immo-ecartees-pending', JSON.stringify(pendingEcarts)); }
+function savePending() {
+  localStorage.setItem('immo-ecartees-pending', JSON.stringify(pendingEcarts));
+  localStorage.setItem('immo-favoris-pending', JSON.stringify(pendingFavs));
+}
+
+// Deux files d'attente vers le script, même mécanique : { items, appliquer(logement, demande, réponse) }
+const FILE_ECARTS = {
+  items: pendingEcarts,
+  appliquer(logement, p, rep) {
+    if (p.action === 'ecarter') ECARTEES.set(logement, { logement, date: rep.date ? new Date(rep.date) : new Date(p.date), purgee: false });
+    else ECARTEES.delete(logement);
+  },
+};
+const FILE_FAVS = {
+  items: pendingFavs,
+  appliquer(logement, p, rep) {
+    const liste = FAVORIS.get(logement) || [];
+    const sans = liste.filter(f => !memeQui(f.qui, p.qui));
+    if (p.action === 'favori') sans.push({ qui: p.qui, date: rep.date ? new Date(rep.date) : new Date(p.date) });
+    if (sans.length) FAVORIS.set(logement, sans); else FAVORIS.delete(logement);
+  },
+};
 
 function ecartInfo(logement) {
   const p = pendingEcarts[logement];
@@ -1489,9 +1546,10 @@ async function envoyerAuScript(payload) {
 }
 
 // Renvoie les demandes restées en attente (hors-ligne, script configuré après coup…)
-async function flushPendingEcarts() {
+async function flushPending() {
   if (!getScriptUrl()) return;
-  for (const logement of Object.keys(pendingEcarts)) await pousserEcart(logement);
+  for (const logement of Object.keys(pendingEcarts)) await pousser(FILE_ECARTS, logement);
+  for (const logement of Object.keys(pendingFavs)) await pousser(FILE_FAVS, logement);
 }
 
 async function ecarter(logement) {
@@ -1501,40 +1559,96 @@ async function ecarter(logement) {
   savePending();
   renderAll();
   showToast('Annonce écartée', 'Annuler', () => restaurer(logement));
-  await pousserEcart(logement);
+  await pousser(FILE_ECARTS, logement);
 }
 
 async function restaurer(logement) {
   const p = pendingEcarts[logement];
-  if (p?.action === 'ecarter' && !envoisEnCours.has(logement)) {
+  if (p?.action === 'ecarter' && !FILE_ECARTS.enCours?.has(logement)) {
     delete pendingEcarts[logement];  // jamais partie vers le Sheet : rien à annuler là-bas
     savePending(); renderAll(); showToast('Annonce restaurée');
     return;
   }
   pendingEcarts[logement] = { action: 'restaurer', date: new Date().toISOString() };
   savePending(); renderAll(); showToast('Annonce restaurée');
-  await pousserEcart(logement);
+  await pousser(FILE_ECARTS, logement);
 }
 
-const envoisEnCours = new Set();
-async function pousserEcart(logement) {
+async function pousser(file, logement) {
   if (!getScriptUrl()) { renderScriptStatus(); return; }
-  const p = pendingEcarts[logement];
-  if (!p || envoisEnCours.has(logement)) return;  // la réponse en vol enchaînera sur la demande la plus récente
-  envoisEnCours.add(logement);
+  file.enCours = file.enCours || new Set();
+  const p = file.items[logement];
+  if (!p || file.enCours.has(logement)) return;  // la réponse en vol enchaînera sur la demande la plus récente
+  file.enCours.add(logement);
   try {
-    const rep = await envoyerAuScript({ action: p.action, logement, ids: p.ids || [], titre: p.titre || '' });
-    if (p.action === 'ecarter') ECARTEES.set(logement, { logement, date: rep.date ? new Date(rep.date) : new Date(p.date), purgee: false });
-    else ECARTEES.delete(logement);
-    if (pendingEcarts[logement] === p) delete pendingEcarts[logement];
+    const { date, ...payload } = p;
+    const rep = await envoyerAuScript({ ...payload, logement });
+    file.appliquer(logement, p, rep);
+    if (file.items[logement] === p) delete file.items[logement];
     savePending(); saveCache(); renderAll();
   } catch (e) {
-    if (e.definitif) { if (pendingEcarts[logement] === p) delete pendingEcarts[logement]; savePending(); renderAll(); showToast(`Script : ${e.message}`); }
+    if (e.definitif) { if (file.items[logement] === p) delete file.items[logement]; savePending(); renderAll(); showToast(`Script : ${e.message}`); }
     else { console.warn('Envoi au script impossible, réessai plus tard :', e.message); renderScriptStatus(); return; }
   } finally {
-    envoisEnCours.delete(logement);
+    file.enCours.delete(logement);
   }
-  if (pendingEcarts[logement]) await pousserEcart(logement);  // l'utilisateur a changé d'avis pendant l'envoi
+  if (file.items[logement]) await pousser(file, logement);  // l'utilisateur a changé d'avis pendant l'envoi
+}
+
+// ─── FAVORIS PARTAGÉS ────────────────────────────────────────────────────────
+//
+// Une ligne par (logement, prénom) dans l'onglet Favoris. Sans prénom (Config), les cœurs
+// restent locaux à ce téléphone (liste `favorites`, comme avant) ; dès qu'un prénom est
+// saisi, ils sont envoyés au Sheet sous ce prénom et les cœurs de l'autre apparaissent.
+
+function favsDe(logement) {
+  const qui = getQui();
+  const liste = (FAVORIS.get(logement) || []).map(f => ({ ...f, moi: !!qui && memeQui(f.qui, qui) }));
+  const p = pendingFavs[logement];
+  if (p && qui && memeQui(p.qui, qui)) {
+    const i = liste.findIndex(f => f.moi);
+    if (p.action === 'favori' && i < 0) liste.push({ qui, date: new Date(p.date), moi: true, locale: true });
+    if (p.action === 'retirer' && i >= 0) liste.splice(i, 1);
+  }
+  if (!qui && favorites.includes(logement)) liste.push({ qui: '', date: null, moi: true, locale: true });
+  liste.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+  return liste;
+}
+
+function favListings() {
+  return LISTINGS.filter(l => !isEcartee(l) && favsDe(l.logementId || l.id).length).sort((a, b) => {
+    const d = l => Math.max(...favsDe(l.logementId || l.id).map(f => f.date?.getTime() || 0), 0);
+    return d(b) - d(a);
+  });
+}
+
+async function toggleFav(logement) {
+  const qui = getQui();
+  const l = LISTINGS.find(x => (x.logementId || x.id) === logement);
+  const mien = favsDe(logement).some(f => f.moi);
+  if (!qui) {  // favoris locaux (pas de prénom saisi)
+    favorites = mien ? favorites.filter(f => f !== logement) : favorites.concat(logement);
+    localStorage.setItem('immo-favs', JSON.stringify(favorites));
+    renderAll();
+    return;
+  }
+  pendingFavs[logement] = { action: mien ? 'retirer' : 'favori', qui, date: new Date().toISOString(), titre: l?.title || '', url: l?.url || '' };
+  savePending();
+  renderAll();
+  await pousser(FILE_FAVS, logement);
+}
+
+// Premier prénom saisi : les cœurs locaux de ce téléphone deviennent des favoris partagés
+function migrerFavorisLocaux(qui) {
+  if (!qui || !favorites.length) return 0;
+  let n = 0;
+  for (const logement of favorites) {
+    if (!pendingFavs[logement]) { pendingFavs[logement] = { action: 'favori', qui, date: new Date().toISOString(), titre: LISTINGS.find(x => (x.logementId || x.id) === logement)?.title || '' }; n++; }
+  }
+  favorites = [];
+  localStorage.setItem('immo-favs', '[]');
+  savePending();
+  return n;
 }
 
 function showToast(message, actionLabel, actionFn) {
@@ -1598,11 +1712,15 @@ function renderSources() {
 
 function renderFavs() {
   const container = document.getElementById('fav-container');
-  const favListings = LISTINGS.filter(l => favorites.includes(l.id));
-  document.getElementById('fav-badge').textContent = favListings.length;
-  container.innerHTML = favListings.length === 0
+  const liste = favListings();
+  document.getElementById('fav-badge').textContent = liste.length;
+  const note = document.getElementById('fav-note');
+  if (note) note.textContent = getQui()
+    ? `Les cœurs des deux téléphones, réunis ici — les tiens sont signés « ${getQui()} ».`
+    : 'Tes cœurs restent sur ce téléphone. Indique ton prénom dans Config → Partage pour les partager.';
+  container.innerHTML = liste.length === 0
     ? `<div class="empty"><div class="empty-icon">🏠</div><div class="empty-title">Aucun favori</div><div class="empty-sub">Appuyez sur ♡ sur une annonce<br>pour la sauvegarder ici</div></div>`
-    : favListings.map(createCard).join('');
+    : liste.map(l => createCard(l)).join('');
 }
 
 function renderEcartees() {
@@ -1630,21 +1748,24 @@ function renderStats() {
   if (document.activeElement !== urlInput) urlInput.value = localStorage.getItem('script-url') || DEFAULT_SCRIPT_URL;
   const keyInput = document.getElementById('script-key-input');
   if (document.activeElement !== keyInput) keyInput.value = getScriptKey();
+  const quiInput = document.getElementById('qui-input');
+  if (document.activeElement !== quiInput) quiInput.value = getQui();
   renderScriptStatus();
 }
 
 function renderScriptStatus(texte) {
   const el = document.getElementById('script-status');
   if (!el) return;
-  const enAttente = Object.keys(pendingEcarts).length;
+  const enAttente = Object.keys(pendingEcarts).length + Object.keys(pendingFavs).length;
   if (texte) { el.textContent = texte; return; }
   if (!getScriptUrl()) {
     el.textContent = enAttente
-      ? `⚠️ Script non configuré — ${enAttente} suppression${enAttente > 1 ? 's' : ''} connue${enAttente > 1 ? 's' : ''} de ce téléphone seulement (le job et l'autre téléphone ne les voient pas).`
-      : 'Script non configuré — les suppressions resteront sur ce téléphone seulement.';
+      ? `⚠️ Script non configuré — ${enAttente} demande${enAttente > 1 ? 's' : ''} (suppression ou cœur) connue${enAttente > 1 ? 's' : ''} de ce téléphone seulement (le job et l'autre téléphone ne les voient pas).`
+      : 'Script non configuré — les suppressions et les favoris resteront sur ce téléphone seulement.';
   } else {
-    const n = nbLogementsEcartes();
-    el.textContent = `✓ Script configuré · ${n} logement${n > 1 ? 's' : ''} écarté${n > 1 ? 's' : ''} dans le Sheet`
+    const n = nbLogementsEcartes(), nf = FAVORIS.size;
+    el.textContent = `✓ Script configuré · ${n} logement${n > 1 ? 's' : ''} écarté${n > 1 ? 's' : ''} · ${nf} favori${nf > 1 ? 's' : ''} dans le Sheet`
+      + (getQui() ? ` · tes cœurs sont signés « ${getQui()} »` : ' · saisis ton prénom pour partager tes cœurs')
       + (enAttente ? ` · ${enAttente} en attente d'envoi (réessai à la prochaine synchro)` : '');
   }
 }
@@ -1652,19 +1773,27 @@ function renderScriptStatus(texte) {
 async function saveScriptConfig() {
   const url = document.getElementById('script-url-input').value.trim();
   const key = document.getElementById('script-key-input').value;
+  const qui = document.getElementById('qui-input').value.trim();
   if (url && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) {
     showToast("L'URL doit être celle du déploiement : https://script.google.com/macros/s/…/exec");
     return;
   }
   if (url) localStorage.setItem('script-url', url); else localStorage.removeItem('script-url');
   if (key) localStorage.setItem('script-key', key); else localStorage.removeItem('script-key');
+  const ancienQui = getQui();
+  if (qui) localStorage.setItem('immo-qui', qui); else localStorage.removeItem('immo-qui');
+  if (qui && !ancienQui) {
+    const n = migrerFavorisLocaux(qui);
+    if (n) showToast(`${n} favori${n > 1 ? 's' : ''} de ce téléphone ${n > 1 ? 'deviennent' : 'devient'} partagé${n > 1 ? 's' : ''} sous « ${qui} »`);
+  }
+  renderAll();
   if (!url) { renderScriptStatus(); return; }
   renderScriptStatus('⏳ Test du script…');
   try {
     const res = await fetch(url, { cache: 'no-store' });
     const json = JSON.parse(await res.text());
     if (json.service !== 'paris-immo-ecartees') throw new Error('ce script ne répond pas comme attendu');
-    showToast(`Script joignable · ${json.ecartees} annonce${json.ecartees > 1 ? 's' : ''} écartée${json.ecartees > 1 ? 's' : ''}`);
+    showToast(`Script joignable · ${json.ecartees} écartée${json.ecartees > 1 ? 's' : ''} · ${json.favoris ?? 0} favori${json.favoris > 1 ? 's' : ''}`);
     await refreshListings({ manual: true });
   } catch (e) {
     renderScriptStatus(`⚠️ Script injoignable : ${e.message}. Vérifie l'URL (…/exec) et que le déploiement est accessible à « Tout le monde ».`);
@@ -1712,20 +1841,6 @@ function filterCards(filter, el) {
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   renderCards();
-}
-
-function toggleFav(id, btn) {
-  if (favorites.includes(id)) {
-    favorites = favorites.filter(f => f !== id);
-    btn.classList.remove('active');
-    btn.textContent = '♡';
-  } else {
-    favorites.push(id);
-    btn.classList.add('active');
-    btn.textContent = '♥';
-  }
-  localStorage.setItem('immo-favs', JSON.stringify(favorites));
-  document.getElementById('fav-badge').textContent = LISTINGS.filter(l => favorites.includes(l.id)).length;
 }
 
 function toggleSource(id, btn) {

@@ -477,6 +477,7 @@
     font-size: 12px; font-weight: 600; letter-spacing: 0.3px; border-bottom: 1px solid var(--border);
   }
   .loue-banner span:last-child { font-weight: 400; color: var(--ink3); }
+  .loue-banner.hors { background: rgba(200,169,110,0.10); color: var(--accent2); }
   .cfg-input {
     flex: 1; min-width: 0; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px;
     font-family: 'DM Sans', sans-serif; color: var(--ink); background: var(--bg);
@@ -595,6 +596,24 @@
     background: var(--surface2);
     color: var(--ink2);
     font-weight: 500;
+    border: 1.5px solid transparent;
+  }
+  /* Pastilles de zone cliquables (Critères) : filtre du fil et des favoris */
+  .arr-pill.zone { cursor: pointer; user-select: none; transition: all 0.15s; padding: 5px 12px; font-size: 12px; }
+  .arr-pill.zone:active { transform: scale(0.96); }
+  .arr-pill.zone.on { background: var(--ink); color: white; border-color: var(--ink); }
+  .arr-pill.zone.off { opacity: 0.45; }
+  .arr-pill.zone .n { opacity: 0.6; font-weight: 400; margin-left: 4px; }
+  .zone-hint { font-size: 12px; color: var(--ink3); line-height: 1.5; margin-top: 10px; }
+  .zone-hint a { color: var(--accent2); font-weight: 500; text-decoration: none; }
+  .zone-banner {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: -6px 0 14px; padding: 8px 12px; border-radius: 10px;
+    background: rgba(200,169,110,0.12); color: var(--accent2); font-size: 12px; font-weight: 500;
+  }
+  .zone-banner button {
+    margin-left: auto; background: none; border: none; color: var(--accent2); font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 0 2px 8px; white-space: nowrap;
   }
 
   /* SOURCES */
@@ -910,6 +929,7 @@
   </div>
 
   <div class="filters" id="filters"></div>
+  <div class="zone-banner" id="zone-banner-fil" style="display:none"></div>
 
   <div id="cards-container"></div>
 </div>
@@ -921,6 +941,7 @@
     <span class="badge" id="fav-badge">0</span>
   </div>
   <div class="section-note" id="fav-note">Les cœurs des deux téléphones, réunis ici.</div>
+  <div class="zone-banner" id="zone-banner-fav" style="display:none"></div>
   <div id="fav-container">
     <div class="empty">
       <div class="empty-icon">🏠</div>
@@ -955,27 +976,18 @@
   <div class="criteria-card">
     <div class="criteria-title">📍 Localisation</div>
     <div class="criteria-row">
-      <span class="criteria-lbl">Ville</span>
-      <span class="criteria-val">Paris</span>
-    </div>
-    <div class="criteria-row">
-      <span class="criteria-lbl">Arrondissements</span>
+      <span class="criteria-lbl">Paris</span>
       <div>
-        <div class="arr-grid" style="justify-content:flex-end">
-          <span class="arr-pill">8e</span><span class="arr-pill">9e</span><span class="arr-pill">10e</span>
-          <span class="arr-pill">11e</span><span class="arr-pill">12e</span><span class="arr-pill">17e</span>
-        </div>
+        <div class="arr-grid" style="justify-content:flex-end" id="zones-paris"></div>
       </div>
     </div>
     <div class="criteria-row">
       <span class="criteria-lbl">Est parisien</span>
       <div style="text-align:right">
-        <div class="arr-grid" style="justify-content:flex-end">
-          <span class="arr-pill">Vincennes</span><span class="arr-pill">Saint-Mandé</span>
-          <span class="arr-pill">Saint-Maur-des-Fossés</span><span class="arr-pill">Joinville-le-Pont</span>
-        </div>
+        <div class="arr-grid" style="justify-content:flex-end" id="zones-est"></div>
       </div>
     </div>
+    <div class="zone-hint" id="zone-hint">Touche une zone pour n'afficher qu'elle dans le fil et les favoris (plusieurs possibles).</div>
   </div>
 
   <div class="criteria-card">
@@ -986,11 +998,11 @@
     </div>
     <div class="criteria-row">
       <span class="criteria-lbl">Pièces</span>
-      <span class="criteria-val">2 pièces minimum</span>
+      <span class="criteria-val" id="crit-pieces">2 pièces minimum</span>
     </div>
     <div class="criteria-row">
       <span class="criteria-lbl">Surface</span>
-      <span class="criteria-val">48 m² minimum</span>
+      <span class="criteria-val" id="crit-surface">48 m² minimum</span>
     </div>
     <div class="criteria-row">
       <span class="criteria-lbl">Meublé</span>
@@ -1006,7 +1018,7 @@
     <div class="criteria-title">💶 Budget</div>
     <div class="criteria-row">
       <span class="criteria-lbl">Loyer maximum</span>
-      <span class="criteria-val" style="font-size:18px;font-family:'Playfair Display',serif;color:var(--accent2)">2 000 €/mois</span>
+      <span class="criteria-val" style="font-size:18px;font-family:'Playfair Display',serif;color:var(--accent2)" id="crit-budget">1 800 €/mois</span>
     </div>
   </div>
 </div>
@@ -1173,6 +1185,18 @@ const firebaseConfig = {
 };
 const VAPID_KEY = "BIZlXjcxGfwahyf7yXDJZYdw2dOatsK5xpr-jW33t6vXFD3i7o8fqeZ7xRCFhwXOkCGhdEhzX8h8JXKKiDJa0cM";
 
+// Critères du job (.env sur pr-small) — à tenir en phase : sert au filtre par zone et au libellé « Hors critères »
+const CRITERES = {
+  budgetMax: 1800, surfaceMin: 48, piecesMin: 2,
+  zones: [
+    { cp: '75008', label: '8e', paris: true }, { cp: '75009', label: '9e', paris: true }, { cp: '75010', label: '10e', paris: true },
+    { cp: '75011', label: '11e', paris: true }, { cp: '75012', label: '12e', paris: true }, { cp: '75017', label: '17e', paris: true },
+    { cp: '94300', label: 'Vincennes' }, { cp: '94160', label: 'Saint-Mandé' }, { cp: '94340', label: 'Joinville-le-Pont' },
+    { cp: '94130', label: 'Nogent-sur-Marne' }, { cp: '94120', label: 'Fontenay-sous-Bois' },
+  ],
+};
+const ZONE_LABEL = Object.fromEntries(CRITERES.zones.map(z => [z.cp, z.label]));
+
 // Couleurs par source (clé = nom normalisé, cf. slug())
 const SOURCE_STYLES = {
   bienici:    { name: "Bien'ici",    color: '#d9282f', icon: 'B' },
@@ -1196,6 +1220,7 @@ let FAVORIS = new Map();   // logement → [{ qui, date }] d'après l'onglet Fav
 // Demandes pas encore confirmées par le script (hors-ligne, script absent…) : logement → { action, date, … }
 let pendingEcarts = JSON.parse(localStorage.getItem('immo-ecartees-pending') || '{}');
 let pendingFavs = JSON.parse(localStorage.getItem('immo-favoris-pending') || '{}');
+let zoneFilter = new Set((JSON.parse(localStorage.getItem('immo-zones') || '[]')).filter(z => typeof z === 'string'));  // vide = toutes
 let scriptErreur = '';  // « clé incorrecte » : on cesse d'envoyer (et on garde tout en attente) jusqu'à la prochaine saisie dans Config
 
 function getSheetId() { return localStorage.getItem('sheet-id') || DEFAULT_SHEET_ID; }
@@ -1254,7 +1279,7 @@ function rowToListing(row) {
   const arr = Number(pick('arrondissement')) || 0;
   const meuble = String(pick('meuble') || 'Non').toLowerCase() === 'oui';
   const parking = String(pick('parking') || 'Non').toLowerCase() === 'oui';
-  const codePostal = String(pick('codepostal') || '');
+  const codePostal = String(pick('codepostal') || '') || (arr ? '750' + String(arr).padStart(2, '0') : '');
   const indisponible = parseGvizDate(pick('indisponibledepuis'));  // renseigné par le job quand l'annonce a disparu du site
   const tags = [meuble ? 'Meublé' : 'Vide'];
   if (arr) tags.push(arr === 1 ? '1er arr.' : `${arr}e arr.`);
@@ -1434,7 +1459,8 @@ function createCard(listing, { ecartee = false } = {}) {
   const favs = favsDe(logement);
   const isFav = favs.some(f => f.moi);
   const info = ecartee ? ecartInfo(logement) : null;
-  const loue = !!listing.loue;
+  const hors = horsCriteres(listing);
+  const loue = !!listing.loue || !!hors;
   return `
     <div class="card ${ecartee ? 'ecartee' : ''} ${loue ? 'loue' : ''}" data-source="${esc(listing.source)}" data-id="${esc(listing.id)}" data-logement="${esc(logement)}">
       ${ecartee ? `
@@ -1442,11 +1468,15 @@ function createCard(listing, { ecartee = false } = {}) {
         <span>🗑 Écartée ${esc(info.quand)} · ${esc(info.restant)}</span>
         <button class="restore" onclick="restaurer('${esc(logement)}')">↩ Restaurer</button>
       </div>` : ''}
-      ${loue && !ecartee ? `
+      ${loue && !ecartee ? (hors && !listing.loue ? `
+      <div class="loue-banner hors">
+        <span>📐 Hors critères</span>
+        <span>${esc(hors)}</span>
+      </div>` : `
       <div class="loue-banner">
         <span>🔒 Déjà loué</span>
         <span>annonce retirée ${esc(listing.loueDepuis ? 'le ' + listing.loueDepuis.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'du site')}</span>
-      </div>` : ''}
+      </div>`) : ''}
       <div class="card-photo">
         ${listing.photo
           ? `<img src="${esc(listing.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=\'photo-placeholder\'>🏠</div>'">`
@@ -1552,8 +1582,62 @@ function isEcartee(l) {
   return [l.id].concat((l.autres || []).map(a => a.id)).some(id => id !== logement && ecartInfo(id));
 }
 
+// ─── CRITÈRES : zones, « hors critères », filtre par zone ────────────────────
+
+function zoneDe(l) { return l.codePostal || (l.arr ? '750' + String(l.arr).padStart(2, '0') : ''); }
+function zoneLabel(cp) {
+  if (ZONE_LABEL[cp]) return ZONE_LABEL[cp];
+  const m = /^750(\d\d)$|^75116$/.exec(cp);
+  if (m) { const n = cp === '75116' ? 16 : +m[1]; return n === 1 ? '1er' : `${n}e`; }
+  return cp;
+}
+
+// Raison pour laquelle l'annonce ne correspond plus aux critères du job (budget, surface, pièces, zone), sinon null.
+// Ces annonces disparaissent des résultats → le job les marquera indisponibles ; l'app les retire du fil tout de suite
+// et les montre grisées « Hors critères » (pas « Déjà loué ») dans les favoris.
+function horsCriteres(l) {
+  const prix = l.prixMin || l.price;
+  if (prix > CRITERES.budgetMax) return `loyer ${prix.toLocaleString('fr-FR')} € > ${CRITERES.budgetMax.toLocaleString('fr-FR')} €`;
+  if (l.surface && l.surface < CRITERES.surfaceMin) return `${l.surface} m² < ${CRITERES.surfaceMin} m²`;
+  if (l.rooms && l.rooms < CRITERES.piecesMin) return `${l.rooms} pièce${l.rooms > 1 ? 's' : ''} < ${CRITERES.piecesMin}`;
+  const z = zoneDe(l);
+  if (z && !ZONE_LABEL[z]) return `${zoneLabel(z)} n'est plus dans les zones`;
+  return null;
+}
+function estRetiree(l) { return !!l.loue || !!horsCriteres(l); }
+
+function dansZones(l) { return !zoneFilter.size || zoneFilter.has(zoneDe(l)); }
+
 function visibleListings() {
-  return LISTINGS.filter(l => !l.loue && !isEcartee(l) && sourcesDe(l).some(src => toggleState[src] !== false));
+  return LISTINGS.filter(l => !estRetiree(l) && !isEcartee(l) && dansZones(l) && sourcesDe(l).some(src => toggleState[src] !== false));
+}
+
+function toggleZone(cp) {
+  if (zoneFilter.has(cp)) zoneFilter.delete(cp); else zoneFilter.add(cp);
+  saveZones(); renderAll();
+}
+function resetZones() { zoneFilter = new Set(); saveZones(); renderAll(); }
+function saveZones() { try { localStorage.setItem('immo-zones', JSON.stringify([...zoneFilter])); } catch (e) { /* quota */ } }
+
+function renderZones() {
+  const compte = {};
+  LISTINGS.forEach(l => { if (!estRetiree(l) && !isEcartee(l)) { const z = zoneDe(l); compte[z] = (compte[z] || 0) + 1; } });
+  const pill = z => `<span class="arr-pill zone ${zoneFilter.has(z.cp) ? 'on' : zoneFilter.size ? 'off' : ''}" onclick="toggleZone('${z.cp}')" data-cp="${z.cp}">${esc(z.label)}${compte[z.cp] ? `<span class="n">${compte[z.cp]}</span>` : ''}</span>`;
+  document.getElementById('zones-paris').innerHTML = CRITERES.zones.filter(z => z.paris).map(pill).join('');
+  document.getElementById('zones-est').innerHTML = CRITERES.zones.filter(z => !z.paris).map(pill).join('');
+  const hint = document.getElementById('zone-hint');
+  const choisies = [...zoneFilter].map(zoneLabel);
+  hint.innerHTML = zoneFilter.size
+    ? `Fil et favoris limités à : <strong>${esc(choisies.join(' · '))}</strong> — <a href="#" onclick="resetZones();return false">tout afficher</a>`
+    : "Touche une zone pour n'afficher qu'elle dans le fil et les favoris (plusieurs possibles).";
+  for (const id of ['zone-banner-fil', 'zone-banner-fav']) {
+    const el = document.getElementById(id);
+    el.style.display = zoneFilter.size ? '' : 'none';
+    el.innerHTML = zoneFilter.size ? `📍 ${esc(choisies.join(' · '))}<button onclick="resetZones()">Tout afficher</button>` : '';
+  }
+  document.getElementById('crit-budget').textContent = `${CRITERES.budgetMax.toLocaleString('fr-FR')} €/mois`;
+  document.getElementById('crit-surface').textContent = `${CRITERES.surfaceMin} m² minimum`;
+  document.getElementById('crit-pieces').textContent = `${CRITERES.piecesMin} pièces minimum`;
 }
 
 function ecarteesListings() {
@@ -1656,9 +1740,9 @@ function favsDe(logement) {
 }
 
 function favListings() {
-  // Les logements déjà loués restent dans les favoris (grisés), après ceux encore en ligne
-  return LISTINGS.filter(l => !isEcartee(l) && favsDe(l.logementId || l.id).length).sort((a, b) => {
-    if (!!a.loue !== !!b.loue) return a.loue ? 1 : -1;
+  // Les logements déjà loués ou hors critères restent dans les favoris (grisés), après ceux encore en ligne
+  return LISTINGS.filter(l => !isEcartee(l) && dansZones(l) && favsDe(l.logementId || l.id).length).sort((a, b) => {
+    if (estRetiree(a) !== estRetiree(b)) return estRetiree(a) ? 1 : -1;
     const d = l => Math.max(...favsDe(l.logementId || l.id).map(f => f.date?.getTime() || 0), 0);
     return d(b) - d(a);
   });
@@ -1764,12 +1848,14 @@ function renderFavs() {
   const container = document.getElementById('fav-container');
   const liste = favListings();
   document.getElementById('fav-badge').textContent = liste.length;
-  const nLoues = liste.filter(l => l.loue).length;
+  const nLoues = liste.filter(l => l.loue).length, nHors = liste.filter(l => !l.loue && horsCriteres(l)).length;
   const note = document.getElementById('fav-note');
   if (note) note.textContent = (getQui()
     ? `Les cœurs des deux téléphones, réunis ici — les tiens sont signés « ${getQui()} ».`
     : 'Tes cœurs restent sur ce téléphone. Indique ton prénom dans Config → Partage pour les partager.')
-    + (nLoues ? ` ${nLoues} ${nLoues > 1 ? 'sont déjà loués (grisés, en bas)' : 'est déjà loué (grisé, en bas)'}.` : '');
+    + (nLoues ? ` ${nLoues} ${nLoues > 1 ? 'sont déjà loués' : 'est déjà loué'}` : '')
+    + (nHors ? `${nLoues ? ',' : ''} ${nHors} hors critères` : '')
+    + (nLoues || nHors ? ' (grisés, en bas).' : '');
   container.innerHTML = liste.length === 0
     ? `<div class="empty"><div class="empty-icon">🏠</div><div class="empty-title">Aucun favori</div><div class="empty-sub">Appuyez sur ♡ sur une annonce<br>pour la sauvegarder ici</div></div>`
     : liste.map(l => createCard(l)).join('');
@@ -1786,7 +1872,7 @@ function renderEcartees() {
 }
 
 function renderStats() {
-  const actives = LISTINGS.filter(l => !l.loue && !isEcartee(l));
+  const actives = LISTINGS.filter(l => !estRetiree(l) && !isEcartee(l));
   const newToday = actives.filter(l => l.isNew).length;
   document.getElementById('stat-total').textContent = actives.length;
   document.getElementById('stat-total-lbl').textContent = RAW_LISTINGS.length > LISTINGS.length
@@ -1862,6 +1948,7 @@ async function saveScriptConfig() {
 }
 
 function renderAll(error) {
+  renderZones();
   renderFilters();
   renderCards(error);
   renderSources();
@@ -2049,8 +2136,13 @@ async function focusAnnonce(id) {
   let listing = LISTINGS.find(l => l.id === id) || LISTINGS.find(l => (l.autres || []).some(a => a.id === id));
   if (listing) id = listing.id;
   const ecartee = listing && isEcartee(listing);
-  if (listing && listing.loue && !ecartee) {
-    if (!favsDe(listing.logementId || listing.id).length) { showInAppAlert('Déjà loué', "Cette annonce a été retirée du site depuis."); return; }
+  if (listing && estRetiree(listing) && !ecartee) {
+    if (!favsDe(listing.logementId || listing.id).length) {
+      const h = horsCriteres(listing);
+      showInAppAlert(h && !listing.loue ? 'Hors critères' : 'Déjà loué', h && !listing.loue ? `Cette annonce ne correspond plus aux critères (${h}).` : "Cette annonce a été retirée du site depuis.");
+      return;
+    }
+    if (!dansZones(listing)) resetZones();
     switchSection('favoris');
     const card = document.querySelector(`#fav-container .card[data-id="${CSS.escape(id)}"]`);
     if (card) { card.classList.add('highlight'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => card.classList.remove('highlight'), 6000); }
@@ -2059,8 +2151,8 @@ async function focusAnnonce(id) {
   switchSection(ecartee ? 'ecartees' : 'annonces');
   activeFilter = 'all';
   if (listing) toggleState[listing.source] = true;
-  renderFilters();
-  renderCards();
+  if (listing && !dansZones(listing)) resetZones();  // une notification pointe une zone masquée : on lève le filtre
+  renderAll();
   const card = document.querySelector(`#${ecartee ? 'ecartees-container' : 'cards-container'} .card[data-id="${CSS.escape(id)}"]`);
   if (!card) { showInAppAlert('Annonce introuvable', "Elle n'est plus dans la liste (retirée ou filtrée)."); return; }
   document.querySelectorAll('.card.highlight').forEach(c => c.classList.remove('highlight'));
